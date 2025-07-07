@@ -71,10 +71,6 @@ public class BSurfaceMeshHandler : MonoBehaviour
     [ContextMenu("Update")]
     void Update()
     {
-        // Only run if frame number is a multiple of framerate.
-        if (Time.frameCount % (_fps*10) != 0)
-            return;
-
         // Interate through all vertices, moving them to the curve.
         for (int i = 0; i < vertex_per_side; i++)
             for (int j = 0; j < vertex_per_side; j++)
