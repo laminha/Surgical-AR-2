@@ -8,8 +8,8 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
 {
     public BsplineManager _control_point_obj;
     readonly List<Vector2> _uv_points = new();
-    public float _gcode_step_size = 0.1f; // The maximum distance between two points in the gcode (unity units).
-    public float _feedrate = 10f; // Feedrate in unity mm/s.
+    public float _gcode_step_size; // The maximum distance between two 3D points in the gcode (unity units).
+    public float _feedrate = 10f; // Feedrate in mm/s.
     private string _file_name;
     private string _file_path;
     void Start()
@@ -32,12 +32,19 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         // Clear previous uv points.
         _uv_points.Clear();
         // Add start point to uv points.
-        _uv_points.Add(new Vector2(1, 1));
-        // Circle perimeter of the BSurface.
-        AddPointsToTargetUv(_control_point_obj._size - 2, 1);
-        AddPointsToTargetUv(_control_point_obj._size - 2, _control_point_obj._size - 2);
-        AddPointsToTargetUv(1, _control_point_obj._size - 2);
-        AddPointsToTargetUv(1, 1);
+        _uv_points.Add(new Vector2(0, 0.5f));
+        // Traverse circular perimeter of the BSurface.
+        for (int i = 0; i < 100; i++)
+        {
+            float theta = 2 * Mathf.PI * i / 99f;
+            // We want to add points going counter clockwise starting from the "major axis index" (conventionally uv=(0,0.5))
+            AddPointsToTargetUvExclusive(
+                0.5f - 0.5f * Mathf.Cos(theta),
+                0.5f - 0.5f * Mathf.Sin(theta)
+            );
+        }
+        // Add final point to uv point.
+        _uv_points.Add(new Vector2(0, 0.5f));
 
         // Draw the gcode path in the scene view for debugging.
         // alternate color from white to black for each segment.
@@ -49,8 +56,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 Debug.DrawLine(start, end, Color.white, 10f);
             else
                 Debug.DrawLine(start, end, Color.black, 10f);
-            // Debug.Log("uv point: " + _uv_points[i] + " -> " + _uv_points[i + 1]);
+            // Debug.Log($"distance between {_uv_points[i]} and {_uv_points[i + 1]}: {Vector3.Distance(start, end)}");
         }
+        return;
 
         // Generate Gcode.
         // Iterate through uv points and add gcode commands to a text file.
@@ -103,13 +111,18 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         File.WriteAllText(_file_path, gcode);
         Debug.Log($"BSurface Gcode written to {_file_path} -Calvin");
     }
-    void AddPointsToTargetUv(float u, float v)
+
+    /// <summary>
+    /// Adds points to the target uv position so that each point is equidistant in 3D space.
+    /// Exclusive of the target position.
+    /// </summary>
+    void AddPointsToTargetUvExclusive(float u, float v)
     {
         int counter = 0;
         while (true)
         {
             // Exit loop if 1000 loops have been reached.
-            if (counter++ > 1000)
+            if (++counter > 1000)
             {
                 Debug.LogError("Infinite loop detected in AddGcodesToTargetUv. Exiting.");
                 break;
@@ -119,29 +132,31 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             Vector2 current_position = _uv_points[_uv_points.Count - 1];
             // Calculate final position.
             Vector2 final_position = new(u, v);
+
             // Calculate unit direction vector.
-            Vector2 direction = (final_position - current_position).normalized;
-            // If the direction is zero, we are already at the final position.
-            if (direction == Vector2.zero)
-            {
-                // Add the final position to the list and exit the loop.
-                _uv_points.Add(final_position);
-                break;
-            }
-            // Calculate how the uv direction changes x,y,&z.
-                Vector3 direction_3d =
-                direction.x * _control_point_obj.CalcBSurfaceVelocityU(u, v) +
-                direction.y * _control_point_obj.CalcBSurfaceVelocityV(u, v);
-            // Divide the direction by the magnitude of the 3D direction vector.
-            Vector2 scaled_direction = direction / direction_3d.magnitude;
+            Vector2 uv_direction = (final_position - current_position).normalized;
+            // If the uv_direction is zero, we are already at the final position.
+            // We want to handle this edge case explicitly to avoid division by zero.
+            if (uv_direction == Vector2.zero)
+                return;
+
+            // Calculate how the 2D direction affects the 3D direction.
+            Vector3 direction_3d =
+                uv_direction.x * _control_point_obj.CalcBSurfaceVelocityU(current_position.x, current_position.y) +
+                uv_direction.y * _control_point_obj.CalcBSurfaceVelocityV(current_position.x, current_position.y);
+
+            // Divide the uv_direction by the magnitude of the 3D direction vector.
+            // This gives us a uv displacement that corresponds to a unit step in 3D space.
+            Vector2 scaled_uv_direction = uv_direction / direction_3d.magnitude;
+
             // Calculate the actual step size in uv space.
-            Vector2 uv_step = scaled_direction * _gcode_step_size;
+            Vector2 uv_step = scaled_uv_direction * _gcode_step_size;
+
             // Check if the distance to the final position is smaller than the step size.
             if (Vector2.Distance(current_position, final_position) < uv_step.magnitude)
             {
-                // If so, add the final position to the list and exit the loop.
-                _uv_points.Add(final_position);
-                break;
+                // If so, exit the loop.
+                return;
             }
             // Otherwise, add the current position to the list and update the uv position.
             _uv_points.Add(current_position + uv_step);
