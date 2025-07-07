@@ -72,15 +72,22 @@ public class SurfaceFittingManager : MonoBehaviour
         Vector3 ellipse_normal = Vector3.Cross(major_axis, minor_axis).normalized;
         if (ellipse_normal.y < 0)
         {
-            ellipse_normal = -ellipse_normal;
+            // Flip minor axis and recalculate normal if the normal is pointing down.
+            // (Can be mathematically simplified, but this is easier to understand.)
+            minor_axis = -minor_axis;
+            ellipse_normal = Vector3.Cross(major_axis, minor_axis).normalized;
             _loop_is_clockwise = false;
+            // Debug.Log("Loop is counter-clockwise, flipping ellipse normal.");
         }
         else
         {
             _loop_is_clockwise = true;
+            // Debug.Log("Loop is clockwise, keeping ellipse normal as is.");
         }
-        // Define rotation that brings "up" to normal, and "forward" to minor.
-        Quaternion ellipse_rot = Quaternion.LookRotation(minor_axis, ellipse_normal);
+        // Define rotation that brings "up" to normal, and "forward" to -minor.
+        // We flip the minor axis because Unity is LHR while the Bsurface is RHR.
+        // We want the minor axis to point in the same direction as the "v" axis of the surface.
+        Quaternion ellipse_rot = Quaternion.LookRotation(-minor_axis, ellipse_normal);
         // Define scale factor. 1/4 because the UI is currently scaled that much.
         float ellipse_scale = 1f / 4f;
 
@@ -122,27 +129,15 @@ public class SurfaceFittingManager : MonoBehaviour
             loop3d[i, 1] = point.y;
             loop3d[i, 2] = point.z;
         }
-        // By default the loop vector is ordered the same as the line renderer.
-        // We want to flip the vector upside down to enforce the order is counter-clockwise.
-        if (_loop_is_clockwise)
-        {
-            // Flip the matrix vertically (reverse the order of the rows)
-            for (int row = 0; row < loop3d.RowCount / 2; row++)
-            {
-                int oppositeRow = loop3d.RowCount - 1 - row;
-                Vector<float> temp = loop3d.Row(row);
-                loop3d.SetRow(row, loop3d.Row(oppositeRow));
-                loop3d.SetRow(oppositeRow, temp);
-            }
-        }
 
         // Parameterize the uv circle. Create a matrix of size (loop_size x 2) where n is the number of points in the drawn loop.
+        float neg_if_clockwise = _loop_is_clockwise ? -1 : 1; // Make uv circle go clockwise if the loop is clockwise.
         Matrix<float> uv_circle = Matrix<float>.Build.Dense(loop_size, 2);
         for (int i = 0; i < loop_size; i++)
         {
             float theta = 2 * Mathf.PI * i / loop_size;
             float u = 0.5f + 0.5f * -Mathf.Cos(theta);
-            float v = 0.5f + 0.5f * -Mathf.Sin(theta);
+            float v = 0.5f + 0.5f * -Mathf.Sin(theta) * neg_if_clockwise;
             uv_circle[i, 0] = u;
             uv_circle[i, 1] = v;
         }
@@ -203,11 +198,11 @@ public class SurfaceFittingManager : MonoBehaviour
         }
 
         // Debug.DrawLine the loop point corresponding to the first row of the b vector.
-        // Vector3 loopPoint_0 = new(loop3d[0, 0], loop3d[0, 1], loop3d[0, 2]);
-        // Debug.DrawLine(loopPoint_0, loopPoint_0 + Vector3.down, Color.black, 10f);
-        // // Do the same for the point a quarter of the way around the loop.
-        // Vector3 loopPoint_quarter = new(loop3d[loop_size / 4, 0], loop3d[loop_size / 4, 1], loop3d[loop_size / 4, 2]);
-        // Debug.DrawLine(loopPoint_quarter, loopPoint_quarter + Vector3.down, Color.red, 10f);
-        // Debug.Log("Drew 0% and 25% loop points for debugging.");
+        Vector3 loopPoint_0 = new(loop3d[0, 0], loop3d[0, 1], loop3d[0, 2]);
+        Debug.DrawLine(loopPoint_0, loopPoint_0 + Vector3.down, Color.black, 10f);
+        // Do the same for the point a quarter of the way around the loop.
+        Vector3 loopPoint_quarter = new(loop3d[loop_size / 4, 0], loop3d[loop_size / 4, 1], loop3d[loop_size / 4, 2]);
+        Debug.DrawLine(loopPoint_quarter, loopPoint_quarter + Vector3.down, Color.red, 10f);
+        Debug.Log("Drew 0% and 25% loop points for debugging.");
     }
 }
