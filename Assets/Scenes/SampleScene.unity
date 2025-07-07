@@ -54235,7 +54235,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!23 &1339017738
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -54299,7 +54299,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.2, y: 0.2, z: 0.2}
+  m_LocalScale: {x: 0.1, y: 0.1, z: 0.1}
   m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 1632074143}
@@ -66233,7 +66233,7 @@ MonoBehaviour:
   _bspline: {fileID: 1487145808}
   _curr_liquify_tool: 0
   _sphere_of_influence: {fileID: 1339017737}
-  _influence_radius: 0.2
+  _influence_radius: 0.02
 --- !u!1 &1632329613
 GameObject:
   m_ObjectHideFlags: 0
