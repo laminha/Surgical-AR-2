@@ -18,11 +18,6 @@ public class ControlPolygonLiquifyToolManager : MonoBehaviour
     public GameObject _sphere_of_influence;
     public float _influence_radius;
 
-    void Start()
-    {
-        _influence_radius = 0.02f;
-    }
-
     [ContextMenu("Update")]
     void Update()
     {

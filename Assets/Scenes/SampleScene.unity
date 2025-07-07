@@ -65966,7 +65966,7 @@ MonoBehaviour:
   _bspline: {fileID: 1487145808}
   _curr_liquify_tool: 0
   _sphere_of_influence: {fileID: 1339017737}
-  _influence_radius: 0.1
+  _influence_radius: 0.2
 --- !u!1 &1632329613
 GameObject:
   m_ObjectHideFlags: 0
