@@ -88,6 +88,9 @@ public class SurfaceFittingManager : MonoBehaviour
         // We flip the minor axis because Unity is LHR while the Bsurface is RHR.
         // We want the minor axis to point in the same direction as the "v" axis of the surface.
         Quaternion ellipse_rot = Quaternion.LookRotation(-minor_axis, ellipse_normal);
+        // Get the rotation from the node UI to the ellipse_rot
+        Quaternion node_ui_rot = transform.rotation;
+        Quaternion node_ui_to_ellipse_rot = Quaternion.Inverse(node_ui_rot) * ellipse_rot;
         // Define scale factor. 1/4 because the UI is currently scaled that much.
         float ellipse_scale = 1f / 4f;
 
@@ -106,7 +109,7 @@ public class SurfaceFittingManager : MonoBehaviour
                 );
 
                 // Rotate points.
-                _bspline._control_points[i, j] = ellipse_rot * _bspline._control_points[i, j];
+                _bspline._control_points[i, j] = node_ui_to_ellipse_rot * _bspline._control_points[i, j];
 
                 // Translate points.
                 _bspline._control_points[i, j] += _bspline.transform.InverseTransformPoint(center_of_mass);
