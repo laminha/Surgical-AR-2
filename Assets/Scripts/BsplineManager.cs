@@ -37,15 +37,15 @@ public class BsplineManager : MonoBehaviour
     }
     void OnDrawGizmos()
     { 
-        // If gizmos disabled, exit.
-        if(_generate_gizmos == false)
-            return;
-
         // Check if surface is defined.
         if (_control_points == null)
         {
             DefineSurface();
         }
+        
+        // If gizmos disabled, exit.
+        if (_generate_gizmos == false)
+            return;
 
         // Draw surface uv = [0, 1].
         Gizmos.color = Color.violet;
