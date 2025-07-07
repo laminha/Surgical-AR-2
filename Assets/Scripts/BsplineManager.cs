@@ -202,6 +202,10 @@ public class BsplineManager : MonoBehaviour
         for (int i = 0; i < _size; i++)
             for (int j = 0; j < _size; j++)
             {
+                // Continue if u or v are outside the 5 knots that the basis function is > 0.
+                if (u < _knot_vector[i] || u > _knot_vector[i + _surface_degree + 1] ||
+                    v < _knot_vector[j] || v > _knot_vector[j + _surface_degree + 1])
+                    continue;
                 output += BasisFunction3D(i, j, u, v) * _control_points[i, j];
             }
         return output;

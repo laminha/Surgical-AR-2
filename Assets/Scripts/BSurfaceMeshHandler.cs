@@ -72,7 +72,7 @@ public class BSurfaceMeshHandler : MonoBehaviour
     void Update()
     {
         // Only run if frame number is a multiple of framerate.
-        if (Time.frameCount % _fps != 0)
+        if (Time.frameCount % (_fps*10) != 0)
             return;
 
         // Interate through all vertices, moving them to the curve.
