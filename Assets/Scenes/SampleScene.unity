@@ -11109,6 +11109,7 @@ GameObject:
   - component: {fileID: 260253098}
   - component: {fileID: 260253097}
   - component: {fileID: 260253103}
+  - component: {fileID: 260253104}
   m_Layer: 0
   m_Name: PerformGcodeButton
   m_TagString: Untagged
@@ -11275,6 +11276,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _target_gcode_performer: {fileID: 626046279}
   _ray_interactable: {fileID: 260253099}
+--- !u!114 &260253104
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 260253095}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bce8eceba11852545820af32c488489a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _local_move_offset: {x: 0, y: 0, z: 4}
 --- !u!1 &261334953
 GameObject:
   m_ObjectHideFlags: 0
@@ -14233,6 +14247,7 @@ GameObject:
   - component: {fileID: 326600216}
   - component: {fileID: 326600215}
   - component: {fileID: 326600221}
+  - component: {fileID: 326600222}
   m_Layer: 0
   m_Name: EllipticalFitSurfaceToDrawing
   m_TagString: Untagged
@@ -14399,6 +14414,19 @@ MonoBehaviour:
   _fitting_manager: {fileID: 1487145810}
   _ray_interactable: {fileID: 326600217}
   _elliptical_mode: 1
+--- !u!114 &326600222
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 326600213}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bce8eceba11852545820af32c488489a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _local_move_offset: {x: 0, y: 0, z: 4}
 --- !u!1 &328224351
 GameObject:
   m_ObjectHideFlags: 0
@@ -19195,6 +19223,7 @@ GameObject:
   - component: {fileID: 440358870}
   - component: {fileID: 440358869}
   - component: {fileID: 440358875}
+  - component: {fileID: 440358876}
   m_Layer: 0
   m_Name: LeastSquaresFitSurfaceToDrawing
   m_TagString: Untagged
@@ -19361,6 +19390,19 @@ MonoBehaviour:
   _fitting_manager: {fileID: 1487145810}
   _ray_interactable: {fileID: 440358871}
   _elliptical_mode: 0
+--- !u!114 &440358876
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 440358867}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bce8eceba11852545820af32c488489a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _local_move_offset: {x: 0, y: 0, z: 4}
 --- !u!1 &441205778
 GameObject:
   m_ObjectHideFlags: 0
@@ -29164,6 +29206,7 @@ GameObject:
   - component: {fileID: 723536753}
   - component: {fileID: 723536752}
   - component: {fileID: 723536758}
+  - component: {fileID: 723536759}
   m_Layer: 0
   m_Name: ToggleDrawMode
   m_TagString: Untagged
@@ -29329,6 +29372,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _target_live_control_handler: {fileID: 251270844}
   _ray_interactable: {fileID: 723536754}
+--- !u!114 &723536759
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 723536750}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bce8eceba11852545820af32c488489a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _local_move_offset: {x: 0, y: 0, z: 4}
 --- !u!1 &723681711
 GameObject:
   m_ObjectHideFlags: 0
@@ -32510,7 +32566,6 @@ GameObject:
   - component: {fileID: 834665208}
   - component: {fileID: 834665211}
   - component: {fileID: 834665210}
-  - component: {fileID: 834665212}
   m_Layer: 0
   m_Name: MenuUi
   m_TagString: Untagged
@@ -32587,20 +32642,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 834665207}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!114 &834665212
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 834665207}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b1667ff9c89fa0d4798fd0f7675f4bbe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _object_to_follow: {fileID: 616367829}
-  _displacement: {x: 0, y: 0.25, z: 0}
 --- !u!1 &835761215
 GameObject:
   m_ObjectHideFlags: 0
@@ -76368,6 +76409,7 @@ GameObject:
   - component: {fileID: 1875593066}
   - component: {fileID: 1875593068}
   - component: {fileID: 1875593069}
+  - component: {fileID: 1875593070}
   m_Layer: 0
   m_Name: GenerateGcodeButton
   m_TagString: Untagged
@@ -76534,6 +76576,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _target_generator: {fileID: 2123422222}
   _ray_interactable: {fileID: 1875593067}
+--- !u!114 &1875593070
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1875593061}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bce8eceba11852545820af32c488489a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _local_move_offset: {x: 0, y: 0, z: 4}
 --- !u!1 &1875910145
 GameObject:
   m_ObjectHideFlags: 0
@@ -76636,6 +76691,7 @@ GameObject:
   - component: {fileID: 1877108298}
   - component: {fileID: 1877108297}
   - component: {fileID: 1877108303}
+  - component: {fileID: 1877108304}
   m_Layer: 0
   m_Name: ToggleLiveControl
   m_TagString: Untagged
@@ -76801,6 +76857,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _target_live_control_handler: {fileID: 2090453147}
   _ray_interactable: {fileID: 1877108299}
+--- !u!114 &1877108304
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1877108295}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bce8eceba11852545820af32c488489a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _local_move_offset: {x: 0, y: 0, z: 4}
 --- !u!1 &1877987991
 GameObject:
   m_ObjectHideFlags: 0
