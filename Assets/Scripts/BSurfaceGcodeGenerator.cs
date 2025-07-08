@@ -186,6 +186,12 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     {
         // WORRY ABOUT RUNTIME AFTER IT WORKS.
 
+        // If there are no uv points, add the first point.
+        if (_uv_points.Count == 0)
+        {
+            _uv_points.Add(new Vector2(0f, 0.5f));
+        }
+
         // Define variables.
         Vector2 curr_uv = _uv_points[_uv_points.Count - 1];
         Vector3 curr_pos = _control_point_obj.CalcBsurface(curr_uv.x, curr_uv.y);
