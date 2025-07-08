@@ -40877,7 +40877,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &993206701
 Transform:
   m_ObjectHideFlags: 0
@@ -89768,7 +89768,7 @@ MonoBehaviour:
   - {x: 0.0033817207, y: 0.54997015}
   - {x: 0.00013011205, y: 0.50192255}
   - {x: 0, y: 0.5}
-  _gcode_step_size: 0.007
+  _gcode_step_size: 0.001
   _stepover: 0.007
   _calculation_step_size: 0.01
   _feedrate: 10

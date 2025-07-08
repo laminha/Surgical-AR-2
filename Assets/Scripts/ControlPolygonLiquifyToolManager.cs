@@ -39,16 +39,18 @@ public class ControlPolygonLiquifyToolManager : MonoBehaviour
         Vector3 delta_left = left_position - prev_left_position;
 
         // Read controller orientation.
-        Quaternion right_rotation = _tracking_space_origin.rightControllerAnchor.rotation;
-        Quaternion left_rotation = _tracking_space_origin.leftControllerAnchor.rotation;
+        Quaternion right_rotation_world = _tracking_space_origin.rightControllerAnchor.rotation;
+        Quaternion left_rotation_world = _tracking_space_origin.leftControllerAnchor.rotation;
+        Quaternion right_rotation_local = Quaternion.Inverse(_bspline.transform.rotation) * right_rotation_world;
+        Quaternion left_rotation_local = Quaternion.Inverse(_bspline.transform.rotation) * left_rotation_world;
 
         // Update prev rotations.
         Quaternion prev_right_rotation = _prev_right_rotation;
         Quaternion prev_left_rotation = _prev_left_rotation;
-        _prev_right_rotation = right_rotation;
-        _prev_left_rotation = left_rotation;
-        Quaternion delta_rot_right = right_rotation * Quaternion.Inverse(prev_right_rotation);
-        Quaternion delta_rot_left = left_rotation * Quaternion.Inverse(prev_left_rotation);
+        _prev_right_rotation = right_rotation_local;
+        _prev_left_rotation = left_rotation_local;
+        Quaternion delta_rot_right = right_rotation_local * Quaternion.Inverse(prev_right_rotation);
+        Quaternion delta_rot_left = left_rotation_local * Quaternion.Inverse(prev_left_rotation);
 
         // Update _curr_liquify_tool.
         _sphere_of_influence.transform.localScale = new(_influence_radius * 2, _influence_radius * 2, _influence_radius * 2);
