@@ -1,21 +1,54 @@
-#pragma warning disable IDE0056 // Use index operator
+#pragma warning disable CS0162 // Unreachable code detected
 using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
-using Unity.Mathematics;
- 
+using UnityEditor;
+using Unity.VisualScripting;
+
 public class BSurfaceGcodeGenerator : MonoBehaviour
 {
     public BsplineManager _control_point_obj;
     readonly List<Vector2> _uv_points = new();
     public float _gcode_step_size; // The maximum distance between two 3D points in the gcode (unity units).
+    public float _stepover; // The distance that two different parts of the toolpath should be apart from each other in 3D space.
+    public float _calculation_step_size; // The distance that is used to calculate the next point with FindStepoverPoint.
     public float _feedrate = 10f; // Feedrate in mm/s.
     private string _file_name;
     private string _file_path;
+    public OVRCameraRig _tracking_space;
     void Start()
     {
         _file_name = "BSurface.gcode";
         _file_path = Path.Combine(Application.persistentDataPath, _file_name);
+    }
+    void Update()
+    {
+        if (_uv_points.Count == 0)
+            GenerateGcode();
+        else
+            DrawUVPoints();
+        FindStepoverPoint(_tracking_space.rightControllerAnchor.position);
+    }
+    void OnDrawGizmos()
+    {
+        if (_uv_points.Count == 0)
+            GenerateGcode();
+        else
+            DrawUVPoints();
+        FindStepoverPoint(_debug_target_pos);
+    }
+    void DrawUVPoints()
+    {
+        float editor_time_mod1 = (float)EditorApplication.timeSinceStartup % 1;
+        // Draw the gcode path in the scene view for debugging.
+        // alternate color from white to black for each segment.
+        for (int i = 0; i < _uv_points.Count - 1; i++)
+        {
+            Vector3 start = transform.TransformPoint(_control_point_obj.CalcBsurface(_uv_points[i].x, _uv_points[i].y));
+            Vector3 end = transform.TransformPoint(_control_point_obj.CalcBsurface(_uv_points[i + 1].x, _uv_points[i + 1].y));
+            bool is_white = Mathf.Floor(editor_time_mod1 * 8) == i % 8;
+            Debug.DrawLine(start, end, is_white ? Color.white : Color.black);
+        }
     }
 
     [ContextMenu("GenerateGcode")]
@@ -46,18 +79,8 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         // Add final point to uv point.
         _uv_points.Add(new Vector2(0, 0.5f));
 
-        // Draw the gcode path in the scene view for debugging.
-        // alternate color from white to black for each segment.
-        for (int i = 0; i < _uv_points.Count - 1; i++)
-        {
-            Vector3 start = transform.TransformPoint(_control_point_obj.CalcBsurface(_uv_points[i].x, _uv_points[i].y));
-            Vector3 end = transform.TransformPoint(_control_point_obj.CalcBsurface(_uv_points[i + 1].x, _uv_points[i + 1].y));
-            if (i % 2 == 0)
-                Debug.DrawLine(start, end, Color.white, 10f);
-            else
-                Debug.DrawLine(start, end, Color.black, 10f);
-            // Debug.Log($"distance between {_uv_points[i]} and {_uv_points[i + 1]}: {Vector3.Distance(start, end)}");
-        }
+        // Draw the uv points in the scene view for debugging.
+        DrawUVPoints();
         return;
 
         // Generate Gcode.
@@ -161,5 +184,178 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             // Otherwise, add the current position to the list and update the uv position.
             _uv_points.Add(current_position + uv_step);
         }
+    }
+    /// <summary>
+    /// Given a 3D target position, finds the uv point that corresponds to the 3D point such that: the point is _calculation_step_size distance away from the last point in _uv_points, the point is at least _stepover distance away from the every other point in _uv_points, and the point is closest of its kind to the target position. Function returns the last uv point if all valid solutions are farther away from target position than the last uv point.
+    /// </summary>
+    public Vector3 _debug_target_pos;
+    public int angular_resolution_per_rev = 100;
+    Vector2 FindStepoverPoint(Vector3 target_pos)
+    {
+        // WORRY ABOUT RUNTIME AFTER IT WORKS.
+
+        // Define variables.
+        Vector2 curr_uv = _uv_points[_uv_points.Count - 1];
+        Vector3 curr_pos = _control_point_obj.CalcBsurface(curr_uv.x, curr_uv.y);
+        Vector3 curr_world = _control_point_obj.transform.TransformPoint(curr_pos);
+
+        // Find the uv direction that moves the closest to the target position.
+        Vector2 uv_dir_closest = new();
+        float min_angle = float.MaxValue;
+        for (int i = 0; i < angular_resolution_per_rev; i++)
+        {
+            float theta = 2*Mathf.PI * i / angular_resolution_per_rev;
+            Vector3 velo_u = Mathf.Cos(theta) * _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y);
+            Vector3 velo_v = Mathf.Sin(theta) * _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
+            Vector3 velocity = velo_u + velo_v;
+            Vector3 curr_to_target = target_pos - _control_point_obj.transform.TransformPoint(curr_pos);
+            float angle_velo_target = Vector3.Angle(velocity, curr_to_target);
+            if (angle_velo_target < min_angle)
+            {
+                min_angle = angle_velo_target;
+                uv_dir_closest = new Vector2(Mathf.Cos(theta), Mathf.Sin(theta)).normalized;
+            }
+        }
+
+        // Normalize the uv direction vector in 3D space.
+        Vector3 uv_dir_3d = uv_dir_closest.x * _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y) +
+                            uv_dir_closest.y * _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
+        uv_dir_closest /= uv_dir_3d.magnitude;
+        // Scale the uv direction vector by the step size.
+        uv_dir_closest *= _calculation_step_size;
+        // Scale the 3D direction vector by the step size.
+        uv_dir_3d = _calculation_step_size * uv_dir_3d.normalized;
+
+        // Define variables.
+        Vector2 next_uv = curr_uv + uv_dir_closest;
+        Vector3 next_pos = curr_pos + uv_dir_3d;
+        Vector3 next_world = _control_point_obj.transform.TransformPoint(next_pos);
+
+        // Check if next_uv is inside the circle inscribing the BSurface.
+        bool is_valid = Vector2.Distance(new(0.5f,0.5f), next_uv) <= 0.5f;
+        // Check if it is too close to any other point in _uv_points.
+        for (int i = 0; i < _uv_points.Count; i++)
+        {
+            if (is_valid == false)
+                break;
+
+            Vector2 other_uv = _uv_points[i];
+            // Calculate the 3D position of the other uv point.
+            Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
+            // Calculate the distance between the next point and the other point.
+            float distance = Vector3.Distance(next_pos, other_pos);
+            // If the distance is less than the stepover distance, the point is not valid.
+            if (distance < _stepover)
+                is_valid = false;
+        }
+
+        // Draw a line from the current point to the target position (in world space).
+        Debug.DrawLine(curr_world, target_pos, Color.green);
+
+        // If it isn't too close, return the uv point.
+        if (is_valid == true)
+        {
+            // Draw a line from the current point to the next point in the "closest" direction.
+            Debug.DrawLine(curr_world, next_world, Color.magenta);
+            return next_uv;
+        }
+
+        for (int i = 0; i <= angular_resolution_per_rev / 2; i++)
+        {
+            if (i == 0)
+                continue;
+
+            // Perform CCW and CW shifts every loop, starting with CCW.
+            float theta_shift = 2 * Mathf.PI * i / angular_resolution_per_rev;
+            // Calculate the new uv direction vector as old next_uv rotated by theta_shift.
+            Vector2 uv_dir_shifted = new(
+                Mathf.Cos(theta_shift) * uv_dir_closest.x - Mathf.Sin(theta_shift) * uv_dir_closest.y,
+                Mathf.Sin(theta_shift) * uv_dir_closest.x + Mathf.Cos(theta_shift) * uv_dir_closest.y
+            );
+            // Renormalize in 3D space.
+            uv_dir_3d = uv_dir_shifted.x * _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y) +
+                        uv_dir_shifted.y * _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
+            uv_dir_shifted /= uv_dir_3d.magnitude;
+            // Rescale the uv direction vector by the calculation step size.
+            uv_dir_shifted *= _calculation_step_size;
+            // Do the same for the 3D vector.
+            uv_dir_3d = _calculation_step_size * uv_dir_3d.normalized;
+
+            // Check if it is valid.
+            next_uv = curr_uv + uv_dir_shifted;
+            next_pos = curr_pos + uv_dir_3d;
+            next_world = _control_point_obj.transform.TransformPoint(next_pos);
+            // Check if next_uv is inside the circle inscribing the BSurface.
+            is_valid = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
+            // Check if it is too close to any other point in _uv_points.
+            for (int i_uv = 0; i_uv < _uv_points.Count; i_uv++)
+            {
+                if (is_valid == false)
+                    break;
+
+                Vector2 other_uv = _uv_points[i_uv];
+                // Calculate the 3D position of the other uv point.
+                Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
+                // Calculate the distance between the next point and the other point.
+                float distance = Vector3.Distance(next_pos, other_pos);
+                // If the distance is less than the stepover distance, the point is not valid.
+                if (distance < _stepover)
+                    is_valid = false;
+            }
+            // Return uv vector if it is valid.
+            if (is_valid == true)
+            {
+                // Draw a line from the current point to the next point in the "shifted" direction.
+                Debug.DrawLine(curr_world, next_world, Color.magenta);
+                return next_uv;
+            }
+
+            // Do the same, but for the CW shift.
+            theta_shift = -theta_shift;
+            // Calculate the new uv direction vector as old next_uv rotated by theta_shift.
+            uv_dir_shifted = new(
+                Mathf.Cos(theta_shift) * uv_dir_closest.x - Mathf.Sin(theta_shift) * uv_dir_closest.y,
+                Mathf.Sin(theta_shift) * uv_dir_closest.x + Mathf.Cos(theta_shift) * uv_dir_closest.y
+            );
+            // Renormalize in 3D space.
+            uv_dir_3d = uv_dir_shifted.x * _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y) +
+                        uv_dir_shifted.y * _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
+            uv_dir_shifted /= uv_dir_3d.magnitude;
+            // Rescale the uv direction vector by the calculation step size.
+            uv_dir_shifted *= _calculation_step_size;
+            // Do the same for the 3D vector.
+            uv_dir_3d = _calculation_step_size * uv_dir_3d.normalized;
+
+            // Check if it is valid.
+            next_uv = curr_uv + uv_dir_shifted;
+            next_pos = curr_pos + uv_dir_3d;
+            next_world = _control_point_obj.transform.TransformPoint(next_pos);
+            // Check if next_uv is inside the circle inscribing the BSurface.
+            is_valid = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
+            // Check if it is too close to any other point in _uv_points.
+            for (int i_uv2 = 0; i_uv2 < _uv_points.Count; i_uv2++)
+            {
+                if (is_valid == false)
+                    break;
+
+                Vector2 other_uv = _uv_points[i_uv2];
+                // Calculate the 3D position of the other uv point.
+                Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
+                // Calculate the distance between the next point and the other point.
+                float distance = Vector3.Distance(next_pos, other_pos);
+                // If the distance is less than the stepover distance, the point is not valid.
+                if (distance < _stepover)
+                    is_valid = false;
+            }
+            // Return uv vector if it is valid.
+            if (is_valid == true)
+            {
+                // Draw a line from the current point to the next point in the "shifted" direction.
+                Debug.DrawLine(curr_world, next_world, Color.magenta);
+                return next_uv;
+            }
+        }
+        // If no valid point was found, return the last point in _uv_points.
+        return _uv_points[_uv_points.Count - 1];
     }
 }
