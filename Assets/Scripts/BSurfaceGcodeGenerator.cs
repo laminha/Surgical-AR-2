@@ -8,7 +8,7 @@ using Unity.VisualScripting;
 public class BSurfaceGcodeGenerator : MonoBehaviour
 {
     public BsplineManager _control_point_obj;
-    readonly List<Vector2> _uv_points = new();
+    public List<Vector2> _uv_points = new();
     public float _gcode_step_size; // The maximum distance between two 3D points in the gcode (unity units).
     public float _stepover; // The distance that two different parts of the toolpath should be apart from each other in 3D space.
     public float _calculation_step_size; // The distance that is used to calculate the next point with FindStepoverPoint.
@@ -20,14 +20,6 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     {
         _file_name = "BSurface.gcode";
         _file_path = Path.Combine(Application.persistentDataPath, _file_name);
-    }
-    void Update()
-    {
-        if (_uv_points.Count == 0)
-            GenerateGcode();
-        else
-            DrawUVPoints();
-        FindStepoverPoint(_tracking_space.rightControllerAnchor.position);
     }
     void OnDrawGizmos()
     {
@@ -139,7 +131,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// Adds points to the target uv position so that each point is equidistant in 3D space.
     /// Exclusive of the target position.
     /// </summary>
-    void AddPointsToTargetUvExclusive(float u, float v)
+    public void AddPointsToTargetUvExclusive(float u, float v)
     {
         int counter = 0;
         while (true)
@@ -190,7 +182,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// </summary>
     public Vector3 _debug_target_pos;
     public int angular_resolution_per_rev = 100;
-    Vector2 FindStepoverPoint(Vector3 target_pos)
+    public Vector2 FindStepoverPoint(Vector3 target_pos)
     {
         // WORRY ABOUT RUNTIME AFTER IT WORKS.
 
@@ -257,7 +249,11 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         {
             // Draw a line from the current point to the next point in the "closest" direction.
             Debug.DrawLine(curr_world, next_world, Color.magenta);
-            return next_uv;
+            // If the next point is further away from the target position than the current point, return the current point.
+            if (Vector3.Distance(next_world, target_pos) > Vector3.Distance(curr_world, target_pos))
+                return curr_uv;
+            else
+                return next_uv;
         }
 
         for (int i = 0; i <= angular_resolution_per_rev / 2; i++)
@@ -307,7 +303,11 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             {
                 // Draw a line from the current point to the next point in the "shifted" direction.
                 Debug.DrawLine(curr_world, next_world, Color.magenta);
-                return next_uv;
+                // If the next point is further away from the target position than the current point, return the current point.
+                if (Vector3.Distance(next_world, target_pos) > Vector3.Distance(curr_world, target_pos))
+                    return curr_uv;
+                else
+                    return next_uv;
             }
 
             // Do the same, but for the CW shift.
@@ -352,10 +352,15 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             {
                 // Draw a line from the current point to the next point in the "shifted" direction.
                 Debug.DrawLine(curr_world, next_world, Color.magenta);
-                return next_uv;
+                // If the next point is further away from the target position than the current point, return the current point.
+                if (Vector3.Distance(next_world, target_pos) > Vector3.Distance(curr_world, target_pos))
+                    return curr_uv;
+                else
+                    return next_uv;
             }
         }
-        // If no valid point was found, return the last point in _uv_points.
-        return _uv_points[_uv_points.Count - 1];
+        // If no valid point was found, return a NaN point.
+        Debug.LogWarning("No valid point found in FindStepoverPoint. Returning NaN point.");
+        return new Vector2(float.NaN, float.NaN);
     }
 }
