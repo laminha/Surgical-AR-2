@@ -89889,9 +89889,9 @@ MonoBehaviour:
   - {x: 0.0033817207, y: 0.54997015}
   - {x: 0.00013011205, y: 0.50192255}
   - {x: 0, y: 0.5}
-  _gcode_step_size: 0.001
+  _gcode_step_size: 0.005
   _stepover: 0.005
-  _calculation_step_size: 0.01
+  _calculation_step_size: 0.006
   _feedrate: 10
   _tracking_space: {fileID: 1751360718}
   _debug_target_pos: {x: -0.23, y: 0.888888, z: 1.05}
