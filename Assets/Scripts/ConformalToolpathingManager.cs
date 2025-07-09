@@ -50,6 +50,7 @@ public class ConformalToolpathingManager : MonoBehaviour
         if (add_point_button_pressed)
         {
             _gcode_generator.AddPointsToTargetUvExclusive(next_uv.x, next_uv.y);
+            _gcode_generator._uv_points.Add(next_uv);
         }
     }
 }
