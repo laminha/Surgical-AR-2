@@ -230,14 +230,13 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         // Draw a gizmo line from the current point to the next point in the "closest" direction.
         // Debug.DrawLine(curr_world, next_world, Color.blue); 
 
+        // Create a vector of the indices that are less than or equal to _calculation_step_size + _stepover away from the current position.
+        List<int> testworthy_indices = new();
         // Check if next_uv is inside the circle inscribing the BSurface.
         bool is_valid = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
         // Check if it is too close to any other point in _uv_points.
         for (int i = 0; i < _uv_points.Count; i++)
         {
-            if (is_valid == false)
-                break;
-
             Vector2 other_uv = _uv_points[i];
             // Calculate the 3D position of the other uv point.
             Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
@@ -246,6 +245,11 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             // If the distance is less than the stepover distance, the point is not valid.
             if (distance < _stepover)
                 is_valid = false;
+// If the distance is less than or equal to the calculation step size + stepover, add the index to the list.
+            if (distance <= _calculation_step_size + _stepover)
+            {
+                testworthy_indices.Add(i);
+            }
         }
 
         // Draw a line from the current point to the target position (in world space).
@@ -290,21 +294,8 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             next_world = _control_point_obj.transform.TransformPoint(next_pos);
             // Check if next_uv is inside the circle inscribing the BSurface.
             is_valid = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
-            // Check if it is too close to any other point in _uv_points.
-            for (int i_uv = 0; i_uv < _uv_points.Count; i_uv++)
-            {
-                if (is_valid == false)
-                    break;
-
-                Vector2 other_uv = _uv_points[i_uv];
-                // Calculate the 3D position of the other uv point.
-                Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
-                // Calculate the distance between the next point and the other point.
-                float distance = Vector3.Distance(next_pos, other_pos);
-                // If the distance is less than the stepover distance, the point is not valid.
-                if (distance < _stepover)
-                    is_valid = false;
-            }
+            // Check if it is too close to any other point in _uv_points[testworthy_indices].
+            is_valid = is_valid && IsValidPos(testworthy_indices, next_pos);
             // Return uv vector if it is valid.
             if (is_valid == true)
             {
@@ -340,20 +331,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             // Check if next_uv is inside the circle inscribing the BSurface.
             is_valid = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
             // Check if it is too close to any other point in _uv_points.
-            for (int i_uv2 = 0; i_uv2 < _uv_points.Count; i_uv2++)
-            {
-                if (is_valid == false)
-                    break;
-
-                Vector2 other_uv = _uv_points[i_uv2];
-                // Calculate the 3D position of the other uv point.
-                Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
-                // Calculate the distance between the next point and the other point.
-                float distance = Vector3.Distance(next_pos, other_pos);
-                // If the distance is less than the stepover distance, the point is not valid.
-                if (distance < _stepover)
-                    is_valid = false;
-            }
+            is_valid = is_valid && IsValidPos(testworthy_indices, next_pos);
             // Return uv vector if it is valid.
             if (is_valid == true)
             {
@@ -369,5 +347,23 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         // If no valid point was found, return a NaN point.
         Debug.LogWarning("No valid point found in FindStepoverPoint. Returning NaN point.");
         return new Vector2(float.NaN, float.NaN);
+    }
+    /// <summary>
+    /// Checks if the next position is valid by checking if it is at least _stepover distance away from every other point in _uv_points.
+    /// </summary>
+    bool IsValidPos(in List<int> testworthy_indices, in Vector3 next_pos)
+    {
+        for (int i_uv = 0; i_uv < testworthy_indices.Count; i_uv++)
+        {
+            Vector2 other_uv = _uv_points[testworthy_indices[i_uv]];
+            // Calculate the 3D position of the other uv point.
+            Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
+            // Calculate the distance between the next point and the other point.
+            float distance = Vector3.Distance(next_pos, other_pos);
+            // If the distance is less than the stepover distance, the point is not valid.
+            if (distance < _stepover)
+                return false;
+        }
+        return true;
     }
 }
