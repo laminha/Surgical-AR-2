@@ -23491,7 +23491,7 @@ Light:
   m_InnerSpotAngle: 52.390244
   m_CookieSize: 10
   m_Shadows:
-    m_Type: 1
+    m_Type: 0
     m_Resolution: 128
     m_CustomResolution: -1
     m_Strength: 1
@@ -41566,7 +41566,7 @@ Light:
   m_InnerSpotAngle: 52.390244
   m_CookieSize: 10
   m_Shadows:
-    m_Type: 1
+    m_Type: 0
     m_Resolution: 128
     m_CustomResolution: -1
     m_Strength: 1
