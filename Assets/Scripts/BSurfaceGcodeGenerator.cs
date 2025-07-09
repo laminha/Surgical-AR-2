@@ -198,9 +198,8 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
 
         // Find the uv direction that moves the closest to the target position.
         // We want to do this analytically, not numerically.
-        Vector2 uv_dir_closest = new();
         // Scalar project the vector from the current position to the target position onto velocityU and velocityV vectors.
-        // The scalar projection values divided by the magnitude of the corresponding velocity vector tells us the correct direction to move in uv space (probably).
+        // The scalar projection values divided by the magnitude of the corresponding velocity vector tells us the correct direction to move in uv space (I think, at least).
         Vector3 velo_u = _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y);
         Vector3 velo_v = _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
         Vector3 curr_to_target = target_pos - curr_pos;
@@ -211,7 +210,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         float u_dir = proj_u / velo_u.magnitude;
         float v_dir = proj_v / velo_v.magnitude;
         // Normalize the uv direction vector.
-        uv_dir_closest = new Vector2(u_dir, v_dir).normalized;
+        Vector2 uv_dir_closest = new Vector2(u_dir, v_dir).normalized;
 
         // Normalize the uv direction vector in 3D space.
         Vector3 uv_dir_3d = uv_dir_closest.x * _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y) +
@@ -245,7 +244,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             // If the distance is less than the stepover distance, the point is not valid.
             if (distance < _stepover)
                 is_valid = false;
-// If the distance is less than or equal to the calculation step size + stepover, add the index to the list.
+            // If the distance is less than or equal to the calculation step size + stepover, add the index to the list.
             if (distance <= _calculation_step_size + _stepover)
             {
                 testworthy_indices.Add(i);
