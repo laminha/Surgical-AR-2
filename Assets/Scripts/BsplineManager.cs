@@ -156,13 +156,12 @@ public class BsplineManager : MonoBehaviour
     }
     public float CoxDeBoorAlgorithmDerivative(int target_knot, float t)
     {
-
         // Just use difference quotient, should be fine.
         const float h = 0.001f;
         // Get the basis value at t.
         float curr_val = CoxDeBoorAlgorithmRecursive(target_knot, _surface_degree, t);
         // Check if a step to the left will leave the partitions of unity.
-        // Will work as long as the partitions of unity are wider than 2*h.
+        // Will work as long as the partitions of unity are wider than 2*h (basically always works).
         if (t - h < _knot_vector[_surface_degree] == false)
         {
             float left_diff = CoxDeBoorAlgorithmRecursive(target_knot, _surface_degree, t - h);
@@ -213,8 +212,13 @@ public class BsplineManager : MonoBehaviour
     {
         Vector3 output = new(0, 0, 0);
         for (int i = 0; i < _size; i++)
-            for (int j = 0; j < _size; j++)
+            for (int j = 0; j < _size; j++) {
+                // Continue if u or v are outside the 5 knots that the basis function is > 0.
+                if (u < _knot_vector[i] || u > _knot_vector[i + _surface_degree + 1] ||
+                    v < _knot_vector[j] || v > _knot_vector[j + _surface_degree + 1])
+                    continue;
                 output += VelocityBasisFunctionU3D(i, j, u, v) * _control_points[i, j];
+            }
         return output;
     }
     public Vector3 CalcBSurfaceVelocityV(float u, float v)
@@ -222,7 +226,13 @@ public class BsplineManager : MonoBehaviour
         Vector3 output = new(0, 0, 0);
         for (int i = 0; i < _size; i++)
             for (int j = 0; j < _size; j++)
+            {
+                // Continue if u or v are outside the 5 knots that the basis function is > 0.
+                if (u < _knot_vector[i] || u > _knot_vector[i + _surface_degree + 1] ||
+                    v < _knot_vector[j] || v > _knot_vector[j + _surface_degree + 1])
+                    continue;
                 output += VelocityBasisFunctionV3D(i, j, u, v) * _control_points[i, j];
+            }
         return output;
     }
 }
