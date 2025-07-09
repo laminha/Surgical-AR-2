@@ -184,8 +184,6 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     public int angular_resolution_per_rev = 100;
     public Vector2 FindStepoverPoint(Vector3 target_world)
     {
-        // WORRY ABOUT RUNTIME AFTER IT WORKS.
-
         // If there are no uv points, add the first point.
         if (_uv_points.Count == 0)
         {
@@ -199,30 +197,29 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         Vector3 curr_world = _control_point_obj.transform.TransformPoint(curr_pos);
 
         // Find the uv direction that moves the closest to the target position.
+        // We want to do this analytically, not numerically.
         Vector2 uv_dir_closest = new();
-        float min_angle = float.MaxValue;
-        for (int i = 0; i < angular_resolution_per_rev; i++)
-        {
-            float theta = 2*Mathf.PI * i / angular_resolution_per_rev;
-            Vector3 velo_u = Mathf.Cos(theta) * _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y);
-            Vector3 velo_v = Mathf.Sin(theta) * _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
-            Vector3 velocity = velo_u + velo_v;
-            Vector3 curr_to_target = target_pos - _control_point_obj.transform.TransformPoint(curr_pos);
-            float angle_velo_target = Vector3.Angle(velocity, curr_to_target);
-            if (angle_velo_target < min_angle)
-            {
-                min_angle = angle_velo_target;
-                uv_dir_closest = new Vector2(Mathf.Cos(theta), Mathf.Sin(theta)).normalized;
-            }
-        }
+        // Scalar project the vector from the current position to the target position onto velocityU and velocityV vectors.
+        // The scalar projection values divided by the magnitude of the corresponding velocity vector tells us the correct direction to move in uv space (probably).
+        Vector3 velo_u = _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y);
+        Vector3 velo_v = _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
+        Vector3 curr_to_target = target_pos - curr_pos;
+        // Calculate the scalar projection
+        float proj_u = Vector3.Dot(curr_to_target, velo_u) / velo_u.magnitude;
+        float proj_v = Vector3.Dot(curr_to_target, velo_v) / velo_v.magnitude;
+        // Divide the projections by the magnitude of the corresponding velocity vector.
+        float u_dir = proj_u / velo_u.magnitude;
+        float v_dir = proj_v / velo_v.magnitude;
+        // Normalize the uv direction vector.
+        uv_dir_closest = new Vector2(u_dir, v_dir).normalized;
 
         // Normalize the uv direction vector in 3D space.
         Vector3 uv_dir_3d = uv_dir_closest.x * _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y) +
                             uv_dir_closest.y * _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
         uv_dir_closest /= uv_dir_3d.magnitude;
-        // Scale the uv direction vector by the step size.
+        // Scale the uv direction vector by the step size (corresponds to vec3 of size _calculation_step_size).
         uv_dir_closest *= _calculation_step_size;
-        // Scale the 3D direction vector by the step size.
+        // Scale the 3D direction vector by the step size (is actually of size _calculation_step_size).
         uv_dir_3d = _calculation_step_size * uv_dir_3d.normalized;
 
         // Define variables.
@@ -230,8 +227,11 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         Vector3 next_pos = curr_pos + uv_dir_3d;
         Vector3 next_world = _control_point_obj.transform.TransformPoint(next_pos);
 
+        // Draw a gizmo line from the current point to the next point in the "closest" direction.
+        // Debug.DrawLine(curr_world, next_world, Color.blue); 
+
         // Check if next_uv is inside the circle inscribing the BSurface.
-        bool is_valid = Vector2.Distance(new(0.5f,0.5f), next_uv) <= 0.5f;
+        bool is_valid = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
         // Check if it is too close to any other point in _uv_points.
         for (int i = 0; i < _uv_points.Count; i++)
         {
