@@ -3,7 +3,6 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
-using Unity.VisualScripting;
 
 public class BSurfaceGcodeGenerator : MonoBehaviour
 {
@@ -181,7 +180,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// Given a 3D target position, finds the uv point that corresponds to the 3D point such that: the point is _calculation_step_size distance away from the last point in _uv_points, the point is at least _stepover distance away from the every other point in _uv_points, and the point is closest of its kind to the target position. Function returns the last uv point if all valid solutions are farther away from target position than the last uv point.
     /// </summary>
     public Vector3 _debug_target_pos;
-    public int angular_resolution_per_rev = 100;
+    public int _angular_resolution_binary_search = 6;
     public Vector2 FindStepoverPoint(Vector3 target_world)
     {
         // If there are no uv points, add the first point.
@@ -266,86 +265,132 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 return next_uv;
         }
 
-        for (int i = 0; i <= angular_resolution_per_rev / 2; i++)
+        // If it is too close, we need to find a valid point that is at least _stepover distance away from every other point in _uv_points.
+        // Perform a binary search in the CCW direction.
+        float inner_ptr_theta = 0;
+        float outer_ptr_theta = Mathf.PI;
+        Vector2 last_solution_ccw = new(float.NaN, float.NaN);
+        for (int i = 0; i < _angular_resolution_binary_search; i++)
         {
-            if (i == 0)
-                continue;
-
-            // Perform CCW and CW shifts every loop, starting with CCW.
-            float theta_shift = 2 * Mathf.PI * i / angular_resolution_per_rev;
-            // Calculate the new uv direction vector as old next_uv rotated by theta_shift.
+            // Calculate the mid angle between the two pointers.
+            float middle_theta = (inner_ptr_theta + outer_ptr_theta) / 2f;
+            // Calculate the new uv direction vector as old next_uv rotated by middle_theta.
             Vector2 uv_dir_shifted = new(
-                Mathf.Cos(theta_shift) * uv_dir_closest.x - Mathf.Sin(theta_shift) * uv_dir_closest.y,
-                Mathf.Sin(theta_shift) * uv_dir_closest.x + Mathf.Cos(theta_shift) * uv_dir_closest.y
+                Mathf.Cos(middle_theta) * uv_dir_closest.x - Mathf.Sin(middle_theta) * uv_dir_closest.y,
+                Mathf.Sin(middle_theta) * uv_dir_closest.x + Mathf.Cos(middle_theta) * uv_dir_closest.y
             );
             // Renormalize in 3D space.
-            uv_dir_3d = uv_dir_shifted.x * _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y) +
-                        uv_dir_shifted.y * _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
-            uv_dir_shifted /= uv_dir_3d.magnitude;
+            Vector3 uv_dir_shifted_3d = uv_dir_shifted.x * _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y) +
+                                        uv_dir_shifted.y * _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
+            uv_dir_shifted /= uv_dir_shifted_3d.magnitude;
             // Rescale the uv direction vector by the calculation step size.
             uv_dir_shifted *= _calculation_step_size;
             // Do the same for the 3D vector.
-            uv_dir_3d = _calculation_step_size * uv_dir_3d.normalized;
+            uv_dir_shifted_3d = _calculation_step_size * uv_dir_shifted_3d.normalized;
 
             // Check if it is valid.
             next_uv = curr_uv + uv_dir_shifted;
-            next_pos = curr_pos + uv_dir_3d;
-            next_world = _control_point_obj.transform.TransformPoint(next_pos);
+            next_pos = curr_pos + uv_dir_shifted_3d;
             // Check if next_uv is inside the circle inscribing the BSurface.
-            is_valid = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
             // Check if it is too close to any other point in _uv_points[testworthy_indices].
-            is_valid = is_valid && IsValidPos(testworthy_indices, next_pos);
-            // Return uv vector if it is valid.
-            if (is_valid == true)
+            bool is_valid_bin_search = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
+            is_valid_bin_search = is_valid_bin_search && IsValidPos(testworthy_indices, next_pos);
+            // If valid, update last_solution.
+            if (is_valid_bin_search)
+                last_solution_ccw = next_uv;
+            // Change the values of the pointers according to is_valid.
+            if (is_valid_bin_search)
             {
-                // Draw a line from the current point to the next point in the "shifted" direction.
-                Debug.DrawLine(curr_world, next_world, Color.magenta);
-                // If the next point is further away from the target position than the current point, return the current point.
-                if (Vector3.Distance(next_world, target_world) > Vector3.Distance(curr_world, target_world))
-                    return curr_uv;
-                else
-                    return next_uv;
+                // If it is valid, move the outer pointer to the middle angle.
+                outer_ptr_theta = middle_theta;
             }
-
-            // Do the same, but for the CW shift.
-            theta_shift = -theta_shift;
-            // Calculate the new uv direction vector as old next_uv rotated by theta_shift.
-            uv_dir_shifted = new(
-                Mathf.Cos(theta_shift) * uv_dir_closest.x - Mathf.Sin(theta_shift) * uv_dir_closest.y,
-                Mathf.Sin(theta_shift) * uv_dir_closest.x + Mathf.Cos(theta_shift) * uv_dir_closest.y
-            );
-            // Renormalize in 3D space.
-            uv_dir_3d = uv_dir_shifted.x * _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y) +
-                        uv_dir_shifted.y * _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
-            uv_dir_shifted /= uv_dir_3d.magnitude;
-            // Rescale the uv direction vector by the calculation step size.
-            uv_dir_shifted *= _calculation_step_size;
-            // Do the same for the 3D vector.
-            uv_dir_3d = _calculation_step_size * uv_dir_3d.normalized;
-
-            // Check if it is valid.
-            next_uv = curr_uv + uv_dir_shifted;
-            next_pos = curr_pos + uv_dir_3d;
-            next_world = _control_point_obj.transform.TransformPoint(next_pos);
-            // Check if next_uv is inside the circle inscribing the BSurface.
-            is_valid = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
-            // Check if it is too close to any other point in _uv_points.
-            is_valid = is_valid && IsValidPos(testworthy_indices, next_pos);
-            // Return uv vector if it is valid.
-            if (is_valid == true)
+            else
             {
-                // Draw a line from the current point to the next point in the "shifted" direction.
-                Debug.DrawLine(curr_world, next_world, Color.magenta);
-                // If the next point is further away from the target position than the current point, return the current point.
-                if (Vector3.Distance(next_world, target_world) > Vector3.Distance(curr_world, target_world))
-                    return curr_uv;
-                else
-                    return next_uv;
+                // If it is not valid, move the inner pointer to the middle angle.
+                inner_ptr_theta = middle_theta;
             }
         }
-        // If no valid point was found, return a NaN point.
-        Debug.LogWarning("No valid point found in FindStepoverPoint. Returning NaN point.");
-        return new Vector2(float.NaN, float.NaN);
+        // Do the same for the CW direction.
+        inner_ptr_theta = 0;
+        outer_ptr_theta = -Mathf.PI;
+        Vector2 last_solution_cw = new(float.NaN, float.NaN);
+        for (int i = 0; i < _angular_resolution_binary_search; i++)
+        {
+            // Calculate the mid angle between the two pointers.
+            float middle_theta = (inner_ptr_theta + outer_ptr_theta) / 2f;
+            // Calculate the new uv direction vector as old next_uv rotated by middle_theta.
+            Vector2 uv_dir_shifted = new(
+                Mathf.Cos(middle_theta) * uv_dir_closest.x - Mathf.Sin(middle_theta) * uv_dir_closest.y,
+                Mathf.Sin(middle_theta) * uv_dir_closest.x + Mathf.Cos(middle_theta) * uv_dir_closest.y
+            );
+            // Renormalize in 3D space.
+            Vector3 uv_dir_shifted_3d = uv_dir_shifted.x * _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y) +
+                                        uv_dir_shifted.y * _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y);
+            uv_dir_shifted /= uv_dir_shifted_3d.magnitude;
+            // Rescale the uv direction vector by the calculation step size.
+            uv_dir_shifted *= _calculation_step_size;
+            // Do the same for the 3D vector.
+            uv_dir_shifted_3d = _calculation_step_size * uv_dir_shifted_3d.normalized;
+
+            // Check if it is valid.
+            next_uv = curr_uv + uv_dir_shifted;
+            next_pos = curr_pos + uv_dir_shifted_3d;
+            // Check if next_uv is inside the circle inscribing the BSurface.
+            // Check if it is too close to any other point in _uv_points[testworthy_indices].
+            bool is_valid_bin_search = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
+            is_valid_bin_search = is_valid_bin_search && IsValidPos(testworthy_indices, next_pos);
+            // If valid, update last_solution.
+            if (is_valid_bin_search)
+                last_solution_cw = next_uv;
+            // Change the values of the pointers according to is_valid.
+            if (is_valid_bin_search)
+            {
+                // If it is valid, move the outer pointer to the middle angle.
+                outer_ptr_theta = middle_theta;
+            }
+            else
+            {
+                // If it is not valid, move the inner pointer to the middle angle.
+                inner_ptr_theta = middle_theta;
+            }
+        }
+
+        // Store booleans for the nan of the 2 solutions.
+        bool ccw_nan = float.IsNaN(last_solution_ccw.x) || float.IsNaN(last_solution_ccw.y);
+        bool cw_nan = float.IsNaN(last_solution_cw.x) || float.IsNaN(last_solution_cw.y);
+        // Handle both solutions are nan case.
+        if (ccw_nan && cw_nan)
+        {
+            Debug.LogWarning("Both solutions are invalid. Returning NaN point.");
+            return new Vector2(float.NaN, float.NaN);
+        }
+        // Handle one solution is nan case.
+        // Handle both are valid case.
+        Vector3 solution;
+        if (ccw_nan ^ cw_nan)
+            solution = ccw_nan ? last_solution_cw : last_solution_ccw;
+        else
+        {
+            // Calculate the distance of the two solutions to the target position.
+            Vector3 last_solution_ccw_pos = _control_point_obj.CalcBsurface(last_solution_ccw.x, last_solution_ccw.y);
+            Vector3 last_solution_cw_pos = _control_point_obj.CalcBsurface(last_solution_cw.x, last_solution_cw.y);
+
+            // If one a solution is further away from the target position than the current point is, set it to the current point.
+            if (Vector3.Distance(last_solution_ccw_pos, target_pos) > Vector3.Distance(curr_pos, target_pos))
+                last_solution_ccw = curr_uv;
+            if (Vector3.Distance(last_solution_cw_pos, target_pos) > Vector3.Distance(curr_pos, target_pos))
+                last_solution_cw = curr_uv;
+
+            // Find which one is closer.
+            bool ccw_is_closer = Vector3.Distance(last_solution_ccw_pos, target_pos) < Vector3.Distance(last_solution_cw_pos, target_pos);
+
+            // Set solution as the closer one.
+            solution = ccw_is_closer ? last_solution_ccw : last_solution_cw;
+        }
+        // Draw a line from the current point to the solution point.
+        Debug.DrawLine(curr_world, _control_point_obj.transform.TransformPoint(_control_point_obj.CalcBsurface(solution.x, solution.y)), Color.magenta);
+        // Return the solution.
+        return solution;
     }
     /// <summary>
     /// Checks if the next position is valid by checking if it is at least _stepover distance away from every other point in _uv_points.
