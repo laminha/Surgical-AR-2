@@ -10,18 +10,24 @@ public class ConformalToolpathingManager : MonoBehaviour
     {
         _line_renderer = GetComponent<LineRenderer>();
     }
+
     void Update()
     {
         // Follow the right controller.
         transform.position = _tracking_space.rightControllerAnchor.TransformPoint(_tracking_space.rightControllerAnchor.localPosition + Vector3.forward * 0.1f);
 
-        // Set the linerender to the uv toolpath.
-        _line_renderer.positionCount = _gcode_generator._uv_points.Count;
-        for (int i = 0; i < _gcode_generator._uv_points.Count; i++)
+        // Update the linerender to the uv toolpath if the uvcount > linecount-1.
+        // ie. if the number of uv points is greater than the number of line renderer points, minus the "preview" point.
+        // Also update if uv count is 1, to hard code an edge case.
+        if (_gcode_generator._uv_points.Count > _line_renderer.positionCount - 1 || _gcode_generator._uv_points.Count == 1)
         {
-            Vector3 point_local = _control_point_obj.CalcBsurface(_gcode_generator._uv_points[i].x, _gcode_generator._uv_points[i].y);
-            Vector3 point_world = _control_point_obj.transform.TransformPoint(point_local);
-            _line_renderer.SetPosition(i, point_world);
+            _line_renderer.positionCount = _gcode_generator._uv_points.Count;
+            for (int i = 0; i < _gcode_generator._uv_points.Count; i++)
+            {
+                Vector3 point_local = _control_point_obj.CalcBsurface(_gcode_generator._uv_points[i].x, _gcode_generator._uv_points[i].y);
+                Vector3 point_world = _control_point_obj.transform.TransformPoint(point_local);
+                _line_renderer.SetPosition(i, point_world);
+            }
         }
 
         // Draw the next segment of the toolpath using FindStepoverPoint.
@@ -36,11 +42,12 @@ public class ConformalToolpathingManager : MonoBehaviour
         // Add it to the line renderer.
         Vector3 next_point_local = _control_point_obj.CalcBsurface(next_uv.x, next_uv.y);
         Vector3 next_point_world = _control_point_obj.transform.TransformPoint(next_point_local);
-        _line_renderer.positionCount++;
+        _line_renderer.positionCount = _gcode_generator._uv_points.Count + 1; // Set the position count to include the new point.
         _line_renderer.SetPosition(_line_renderer.positionCount - 1, next_point_world);
 
         // If the A button is pressed, add the next point to the uv points.
-        if (OVRInput.Get(OVRInput.Button.One, OVRInput.Controller.RTouch))
+        bool add_point_button_pressed = OVRInput.GetDown(OVRInput.Button.One, OVRInput.Controller.RTouch);
+        if (add_point_button_pressed)
         {
             _gcode_generator.AddPointsToTargetUvExclusive(next_uv.x, next_uv.y);
         }
