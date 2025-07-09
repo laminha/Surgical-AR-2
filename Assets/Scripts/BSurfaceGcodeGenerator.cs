@@ -182,7 +182,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// </summary>
     public Vector3 _debug_target_pos;
     public int angular_resolution_per_rev = 100;
-    public Vector2 FindStepoverPoint(Vector3 target_pos)
+    public Vector2 FindStepoverPoint(Vector3 target_world)
     {
         // WORRY ABOUT RUNTIME AFTER IT WORKS.
 
@@ -193,6 +193,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         }
 
         // Define variables.
+        Vector3 target_pos = _control_point_obj.transform.InverseTransformPoint(target_world);
         Vector2 curr_uv = _uv_points[_uv_points.Count - 1];
         Vector3 curr_pos = _control_point_obj.CalcBsurface(curr_uv.x, curr_uv.y);
         Vector3 curr_world = _control_point_obj.transform.TransformPoint(curr_pos);
@@ -248,7 +249,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         }
 
         // Draw a line from the current point to the target position (in world space).
-        Debug.DrawLine(curr_world, target_pos, Color.green);
+        Debug.DrawLine(curr_world, target_world, Color.green);
 
         // If it isn't too close, return the uv point.
         if (is_valid == true)
@@ -256,7 +257,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             // Draw a line from the current point to the next point in the "closest" direction.
             Debug.DrawLine(curr_world, next_world, Color.magenta);
             // If the next point is further away from the target position than the current point, return the current point.
-            if (Vector3.Distance(next_world, target_pos) > Vector3.Distance(curr_world, target_pos))
+            if (Vector3.Distance(next_world, target_world) > Vector3.Distance(curr_world, target_world))
                 return curr_uv;
             else
                 return next_uv;
@@ -310,7 +311,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 // Draw a line from the current point to the next point in the "shifted" direction.
                 Debug.DrawLine(curr_world, next_world, Color.magenta);
                 // If the next point is further away from the target position than the current point, return the current point.
-                if (Vector3.Distance(next_world, target_pos) > Vector3.Distance(curr_world, target_pos))
+                if (Vector3.Distance(next_world, target_world) > Vector3.Distance(curr_world, target_world))
                     return curr_uv;
                 else
                     return next_uv;
@@ -359,7 +360,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 // Draw a line from the current point to the next point in the "shifted" direction.
                 Debug.DrawLine(curr_world, next_world, Color.magenta);
                 // If the next point is further away from the target position than the current point, return the current point.
-                if (Vector3.Distance(next_world, target_pos) > Vector3.Distance(curr_world, target_pos))
+                if (Vector3.Distance(next_world, target_world) > Vector3.Distance(curr_world, target_world))
                     return curr_uv;
                 else
                     return next_uv;
