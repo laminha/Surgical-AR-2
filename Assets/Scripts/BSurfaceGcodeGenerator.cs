@@ -181,6 +181,11 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// </summary>
     public Vector3 _debug_target_pos;
     public int _angular_resolution_binary_search = 6;
+    /// <summary>
+    /// A vector of the indices that are less than or equal to _calculation_step_size + _stepover away from the current position.
+    /// </summary>
+    List<int> sTestworthyIndices;
+    Vector2 sPrevUv;
     public Vector2 FindStepoverPoint(Vector3 target_world)
     {
         // If there are no uv points, add the first point.
@@ -194,6 +199,10 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         Vector2 curr_uv = _uv_points[_uv_points.Count - 1];
         Vector3 curr_pos = _control_point_obj.CalcBsurface(curr_uv.x, curr_uv.y);
         Vector3 curr_world = _control_point_obj.transform.TransformPoint(curr_pos);
+
+        // Update sPrevUv and store difference in a bool.
+        bool curr_uv_changed = sPrevUv != curr_uv;
+        sPrevUv = curr_uv;
 
         // Find the uv direction that moves the closest to the target position.
         // We want to do this analytically, not numerically.
@@ -225,30 +234,32 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         Vector3 next_pos = curr_pos + uv_dir_3d;
         Vector3 next_world = _control_point_obj.transform.TransformPoint(next_pos);
 
-        // Draw a gizmo line from the current point to the next point in the "closest" direction.
-        // Debug.DrawLine(curr_world, next_world, Color.blue); 
-
-        // Create a vector of the indices that are less than or equal to _calculation_step_size + _stepover away from the current position.
-        List<int> testworthy_indices = new();
+        // If the current uv point changed, or sTestworthyIndices is null, we need to recalculate the testworthy indices.
+        if (curr_uv_changed || sTestworthyIndices == null)
+        {
+            // Initialize the list of testworthy indices.
+            sTestworthyIndices = new List<int>();
+            // Iterate through the uv points.
+            for (int i = 0; i < _uv_points.Count; i++)
+            {
+                // We already have the current uv's 3D point.
+                // Calculate the 3D position of the other uv point.
+                Vector2 other_uv = _uv_points[i];
+                Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
+                // Calculate the distance between the curr point and the other point.
+                float distance = Vector3.Distance(curr_pos, other_pos);
+                // If the distance is less than or equal to the calculation step size + stepover, add the index to the list.
+                if (distance <= _calculation_step_size + _stepover)
+                {
+                    sTestworthyIndices.Add(i);
+                }
+            }
+        }
+    
         // Check if next_uv is inside the circle inscribing the BSurface.
         bool is_valid = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
         // Check if it is too close to any other point in _uv_points.
-        for (int i = 0; i < _uv_points.Count; i++)
-        {
-            Vector2 other_uv = _uv_points[i];
-            // Calculate the 3D position of the other uv point.
-            Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
-            // Calculate the distance between the next point and the other point.
-            float distance = Vector3.Distance(next_pos, other_pos);
-            // If the distance is less than the stepover distance, the point is not valid.
-            if (distance < _stepover)
-                is_valid = false;
-            // If the distance is less than or equal to the calculation step size + stepover, add the index to the list.
-            if (distance <= _calculation_step_size + _stepover)
-            {
-                testworthy_indices.Add(i);
-            }
-        }
+        is_valid = is_valid && IsValidPos(sTestworthyIndices, next_pos);
 
         // Draw a line from the current point to the target position (in world space).
         Debug.DrawLine(curr_world, target_world, Color.green);
@@ -294,7 +305,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             // Check if next_uv is inside the circle inscribing the BSurface.
             // Check if it is too close to any other point in _uv_points[testworthy_indices].
             bool is_valid_bin_search = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
-            is_valid_bin_search = is_valid_bin_search && IsValidPos(testworthy_indices, next_pos);
+            is_valid_bin_search = is_valid_bin_search && IsValidPos(sTestworthyIndices, next_pos);
             // If valid, update last_solution.
             if (is_valid_bin_search)
                 last_solution_ccw = next_uv;
@@ -336,9 +347,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             next_uv = curr_uv + uv_dir_shifted;
             next_pos = curr_pos + uv_dir_shifted_3d;
             // Check if next_uv is inside the circle inscribing the BSurface.
-            // Check if it is too close to any other point in _uv_points[testworthy_indices].
+            // Check if it is too close to any other point in _uv_points[sTestworthyIndices].
             bool is_valid_bin_search = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
-            is_valid_bin_search = is_valid_bin_search && IsValidPos(testworthy_indices, next_pos);
+            is_valid_bin_search = is_valid_bin_search && IsValidPos(sTestworthyIndices, next_pos);
             // If valid, update last_solution.
             if (is_valid_bin_search)
                 last_solution_cw = next_uv;
