@@ -65,11 +65,15 @@ public class ConformalToolpathingManager : MonoBehaviour
 
 
         // If the A button is pressed, add the next point to the uv points.
-        bool add_point_button_pressed = OVRInput.GetDown(OVRInput.Button.One, OVRInput.Controller.RTouch);
+        bool add_point_button_pressed = OVRInput.Get(OVRInput.Button.One, OVRInput.Controller.RTouch);
         if (add_point_button_pressed)
         {
-            _gcode_generator.AddPointsToTargetUvExclusive(next_uv.x, next_uv.y);
-            _gcode_generator._uv_points.Add(next_uv);
+            // Only add at a rate of 1 pointer per 10 frames.
+            if (Time.frameCount % 10 == 0)
+            {
+                _gcode_generator.AddPointsToTargetUvExclusive(next_uv.x, next_uv.y);
+                _gcode_generator._uv_points.Add(next_uv);
+            }
         }
     }
 }
