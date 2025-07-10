@@ -359,10 +359,10 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             }
         }
 
-        // If nothing was returned, return NaN, unless sticky mode is still on, then return uv_dir_closest.
+        // If nothing was returned, return NaN, unless sticky mode is still on, then return curr_uv.
         solution_type = FindStepoverPointSolutionType.NoSolution;
         if (sticky_mode)
-            return uv_dir_closest;
+            return curr_uv;
         else
             return new Vector2(float.NaN, float.NaN);
     }

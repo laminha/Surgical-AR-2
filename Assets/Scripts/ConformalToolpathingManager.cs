@@ -68,18 +68,18 @@ public class ConformalToolpathingManager : MonoBehaviour
 
         // If the A button is pressed, add the next point to the uv points.
         bool add_point_button_pressed = OVRInput.Get(OVRInput.Button.One, OVRInput.Controller.RTouch);
-            // Only add at a rate of 1 point per 10 frames.
+            // Only add at a rate.
         if (add_point_button_pressed && unaddable == false)
-            if (Time.frameCount % 10 == 0)
+            if (Time.frameCount % 2 == 0)
             {
                 _gcode_generator.AddPointsToTargetUvExclusive(next_uv.x, next_uv.y);
                 _gcode_generator._uv_points.Add(next_uv);
             }
         // If the B button is pressed, delete the last _uv_point.
-        // Only delete at a rate of 2 points per 10 frames.
+        // Only delete at a rate.
         bool delete_point_button_pressed = OVRInput.Get(OVRInput.Button.Two, OVRInput.Controller.RTouch);
         if (delete_point_button_pressed && _gcode_generator._uv_points.Count > 0)
-            if (Time.frameCount % 5 == 0)
+            if (Time.frameCount % 1 == 0)
                 _gcode_generator._uv_points.RemoveAt(_gcode_generator._uv_points.Count - 1);
     }
 }

@@ -196,6 +196,12 @@ public class BsplineManager : MonoBehaviour
     }
     public Vector3 CalcBsurface(float u, float v)
     {
+        // If u or v are not in range [0,1], logerror and return zero vector.
+        if (u < 0 || u > 1 || v < 0 || v > 1)
+        {
+            Debug.LogError($"u or v are out of range: u = {u}, v = {v}");
+            return Vector3.zero;
+        }
         Vector3 output = new(0, 0, 0);
         for (int i = 0; i < _size; i++)
             for (int j = 0; j < _size; j++)
@@ -210,6 +216,12 @@ public class BsplineManager : MonoBehaviour
     }
     public Vector3 CalcBSurfaceVelocityU(float u, float v)
     {
+        // If u or v are not in range [0,1], logerror and return zero vector.
+        if (u < 0 || u > 1 || v < 0 || v > 1)
+        {
+            Debug.LogError($"u or v are out of range: u = {u}, v = {v}");
+            return Vector3.zero;
+        }
         Vector3 output = new(0, 0, 0);
         for (int i = 0; i < _size; i++)
             for (int j = 0; j < _size; j++) {
@@ -223,6 +235,12 @@ public class BsplineManager : MonoBehaviour
     }
     public Vector3 CalcBSurfaceVelocityV(float u, float v)
     {
+        // If u or v are not in range [0,1], logerror and return zero vector.
+        if (u < 0 || u > 1 || v < 0 || v > 1)
+        {
+            Debug.LogError($"u or v are out of range: u = {u}, v = {v}");
+            return Vector3.zero;
+        }
         Vector3 output = new(0, 0, 0);
         for (int i = 0; i < _size; i++)
             for (int j = 0; j < _size; j++)
