@@ -17,9 +17,9 @@ public class ConformalToolpathingManager : MonoBehaviour
         // Follow the right controller.
         transform.position = _tracking_space.rightControllerAnchor.TransformPoint(_tracking_space.rightControllerAnchor.localPosition + Vector3.forward * 0.1f);
 
-        // Update the linerender to the uv toolpath if the uvcount > linecount-1.
-        // ie. if the number of uv points is greater than the number of line renderer points, minus the "preview" point.
-        // Also update if uv count is less that 5, to hard code edge cases.
+        // Update the linerender to the uv toolpath if the uvcount != linecount-1.
+        // ie. if the number of uv points is not equal to the number of line renderer points, minus the "preview" point.
+        // Also update if uv count is less than 5, to hard code edge cases.
         if (_gcode_generator._uv_points.Count != _line_renderer.positionCount - 1 || _gcode_generator._uv_points.Count < 5)
         {
             // Update the toolpath line.
@@ -51,7 +51,7 @@ public class ConformalToolpathingManager : MonoBehaviour
 
         // Draw the next segment of the toolpath using FindStepoverPoint.
         Vector2 next_uv = _gcode_generator.FindStepoverPoint(transform.position, true);
-        // If the next point is NaN, set it to the previous point and mark the point as unaddable.
+        // If the next point is NaN, set the preview to the previous point and mark the point as unaddable.
         bool unaddable = false;
         if (float.IsNaN(next_uv.x) || float.IsNaN(next_uv.y))
         {
@@ -68,14 +68,18 @@ public class ConformalToolpathingManager : MonoBehaviour
 
         // If the A button is pressed, add the next point to the uv points.
         bool add_point_button_pressed = OVRInput.Get(OVRInput.Button.One, OVRInput.Controller.RTouch);
+            // Only add at a rate of 1 point per 10 frames.
         if (add_point_button_pressed && unaddable == false)
-        {
-            // Only add at a rate of 1 pointer per 10 frames.
             if (Time.frameCount % 10 == 0)
             {
                 _gcode_generator.AddPointsToTargetUvExclusive(next_uv.x, next_uv.y);
                 _gcode_generator._uv_points.Add(next_uv);
             }
-        }
+        // If the B button is pressed, delete the last _uv_point.
+        // Only delete at a rate of 2 points per 10 frames.
+        bool delete_point_button_pressed = OVRInput.Get(OVRInput.Button.Two, OVRInput.Controller.RTouch);
+        if (delete_point_button_pressed && _gcode_generator._uv_points.Count > 0)
+            if (Time.frameCount % 5 == 0)
+                _gcode_generator._uv_points.RemoveAt(_gcode_generator._uv_points.Count - 1);
     }
 }

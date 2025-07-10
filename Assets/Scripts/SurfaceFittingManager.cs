@@ -118,6 +118,10 @@ public class SurfaceFittingManager : MonoBehaviour
     [ContextMenu("Fit Least Squares Control Points")]
     public void FitSurfaceToDrawingLeastSquares()
     {
+        // Exit if there are less than 10 points in the drawn loop.
+        if (_drawn_loop.positionCount < 10)
+            return;
+
         // Create a MathNet vector of points from the drawn loop. This will be our "b" vector.
         // We want this vector to start at the point correspondsing to the major diameter index,
         // and then go counter_clockwise around the loop.
