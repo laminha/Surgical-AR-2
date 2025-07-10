@@ -27,7 +27,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             GenerateGcode();
         else
             DrawUVPoints();
-        FindStepoverPoint(_debug_target_pos);
+        FindStepoverPoint(_debug_target_pos, true);
     }
     void DrawUVPoints()
     {
@@ -188,7 +188,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// </summary>
     List<int> sTestworthyIndices;
     Vector2 sPrevUv;
-    public Vector2 FindStepoverPoint(Vector3 target_world /*, bool sticky_mode = false*/)
+    public Vector2 FindStepoverPoint(Vector3 target_world, bool sticky_mode = false)
     {
         // If there are no uv points, add the first point.
         if (_uv_points.Count == 0)
@@ -234,6 +234,12 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         // Print the angles for debugging.
         // Debug.Log($"Angle surface: {uv_dir_closest_surf_angle * Mathf.Rad2Deg}deg, Angle uv: {uv_dir_closest_uv_angle * Mathf.Rad2Deg}deg");
 
+        // If _uv_points is emptyish, reset the testworthy indices.
+        // the number 10 is a catch-all, can be reduced probably.
+        if (_uv_points.Count < 10)
+        {
+            sTestworthyIndices = new();
+        }
         // If the current uv point changed, or sTestworthyIndices is null, we need to recalculate the testworthy indices.
         if (curr_uv_changed || sTestworthyIndices == null)
         {
@@ -258,6 +264,8 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
 
         // Perform linear search on the two quarters next to the initial guess.
         // Precomputations.
+        Vector2 prev_ccw_valid_uv = new();
+        Vector2 prev_cw_valid_uv = new();
         for (int i = 0; i <= _angular_resolution_per_rev / 4; i++)
         {
             // Perform 1 CCW and 1 CW shift+test every outerloop, starting with CCW.
@@ -294,15 +302,44 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 // Check if next_uv is inside the circle inscribing the BSurface.
                 // Check if it is too close to any other point in _uv_points[sTestworthyIndices].
                 bool is_valid = (Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f) && IsValidPos(sTestworthyIndices, next_pos);
-                // Return uv vector if it is valid.
-                if (is_valid == true)
-                {
-                    // Print wanted and actual theta shift for debugging.
-                    // Debug.Log($"Wanted theta shift: {theta_shift_wanted}, Actual theta shift: {theta_shift_uv}");
 
-                    // Draw a debug line from the current point to the next point in the "shifted" direction.
-                    Debug.DrawLine(curr_world, next_world, Color.magenta);
-                    return next_uv;
+                // In sticky mode, we only want to return the point if it is next to an invalid point.
+                // If the initial guess is invalid, we want to turn sticky mode off, because the next valid point is gurenteed to be a sticky one.
+                if (i == 0 && is_valid == false)
+                    sticky_mode = false;
+                // Handle sticky mode logic.
+                if (sticky_mode == false)
+                {
+                    if (is_valid == true)
+                    {
+                        // Print wanted and actual theta shift for debugging.
+                        // Debug.Log($"Wanted theta shift: {theta_shift_wanted}, Actual theta shift: {theta_shift_uv}");
+
+                        // Draw a debug line from the current point to the next point in the "shifted" direction.
+                        Debug.DrawLine(curr_world, next_world, Color.magenta);
+                        return next_uv;
+                    }
+                }
+                else
+                {
+                    // We need to find the next invalid point, then return the previous valid point in that direction.
+                    if (is_valid == false)
+                    {
+                        Vector2 output = (ccw_cw_enum == 0) ? prev_ccw_valid_uv : prev_cw_valid_uv;
+
+                        Vector3 output_world = _control_point_obj.transform.TransformPoint(_control_point_obj.CalcBsurface(output.x, output.y));
+                        Debug.DrawLine(curr_world, output_world, Color.magenta);
+                        
+                        return output;
+                    }
+                    else
+                    {
+                        // Update the corresponding previous valid point.
+                        if (ccw_cw_enum == 0)
+                            prev_ccw_valid_uv = next_uv;
+                        else
+                            prev_cw_valid_uv = next_uv;
+                    }
                 }
             }
         }

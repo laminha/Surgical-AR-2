@@ -50,7 +50,7 @@ public class ConformalToolpathingManager : MonoBehaviour
         }
 
         // Draw the next segment of the toolpath using FindStepoverPoint.
-        Vector2 next_uv = _gcode_generator.FindStepoverPoint(transform.position);
+        Vector2 next_uv = _gcode_generator.FindStepoverPoint(transform.position, true);
         // Add it to the line renderer.
         Vector3 next_point_local = _control_point_obj.CalcBsurface(next_uv.x, next_uv.y);
         Vector3 next_point_world = _control_point_obj.transform.TransformPoint(next_point_local);
