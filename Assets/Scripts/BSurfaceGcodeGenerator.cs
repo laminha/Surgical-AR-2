@@ -178,6 +178,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     }
     /// <summary>
     /// Given a 3D target position, finds the uv point that corresponds to the 3D point such that: the point is _calculation_step_size distance away from the last point in _uv_points, the point is at least _stepover distance away from the every other point in _uv_points, and the point is closest of its kind to the target position. Function returns the last uv point if all valid solutions are farther away from target position than the last uv point.
+    /// Sticky mode only returns extremes, ie. solutions that are next to an invalid solution.
     /// </summary>
     public Vector3 _debug_target_pos;
     public int _angular_resolution_binary_search = 6;
@@ -186,7 +187,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// </summary>
     List<int> sTestworthyIndices;
     Vector2 sPrevUv;
-    public Vector2 FindStepoverPoint(Vector3 target_world)
+    public Vector2 FindStepoverPoint(Vector3 target_world, bool sticky_mode = false)
     {
         // If there are no uv points, add the first point.
         if (_uv_points.Count == 0)
