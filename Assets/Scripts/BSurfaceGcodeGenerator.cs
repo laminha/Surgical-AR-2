@@ -27,7 +27,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             GenerateGcode();
         else
             DrawUVPoints();
-        FindStepoverPoint(_debug_target_pos, true);
+        FindStepoverPoint(_debug_target_pos, out _, true); // The _ means I dont care about the out parameter.
     }
     void DrawUVPoints()
     {
@@ -188,7 +188,15 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// </summary>
     List<int> sTestworthyIndices;
     Vector2 sPrevUv;
-    public Vector2 FindStepoverPoint(Vector3 target_world, bool sticky_mode = false)
+    public enum FindStepoverPointSolutionType
+    {
+        NoSolution,
+        CCWSolution,
+        CWSolution,
+        CCWFarSolution,
+        CWFarSolution
+    }
+    public Vector2 FindStepoverPoint(Vector3 target_world, out FindStepoverPointSolutionType solution_type, bool sticky_mode = false)
     {
         // If there are no uv points, add the first point.
         if (_uv_points.Count == 0)
@@ -319,6 +327,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
 
                         // Draw a debug line from the current point to the next point in the "shifted" direction.
                         Debug.DrawLine(curr_world, next_world, Color.magenta);
+                        solution_type = ccw_cw_enum == 0 ?
+                            FindStepoverPointSolutionType.CCWSolution :
+                            FindStepoverPointSolutionType.CWSolution;
                         return next_uv;
                     }
                 }
@@ -331,7 +342,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
 
                         Vector3 output_world = _control_point_obj.transform.TransformPoint(_control_point_obj.CalcBsurface(output.x, output.y));
                         Debug.DrawLine(curr_world, output_world, Color.magenta);
-                        
+                        solution_type = ccw_cw_enum == 0 ?
+                            FindStepoverPointSolutionType.CCWSolution :
+                            FindStepoverPointSolutionType.CWSolution;
                         return output;
                     }
                     else
@@ -346,8 +359,12 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             }
         }
 
-        // If nothing was returned, return NaN.
-        return new Vector2(float.NaN, float.NaN);
+        // If nothing was returned, return NaN, unless sticky mode is still on, then return uv_dir_closest.
+        solution_type = FindStepoverPointSolutionType.NoSolution;
+        if (sticky_mode)
+            return uv_dir_closest;
+        else
+            return new Vector2(float.NaN, float.NaN);
     }
     /// <summary>
     /// Checks if the next position is valid by checking if it is at least _stepover distance away from every other point in _uv_points.
