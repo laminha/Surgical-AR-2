@@ -254,8 +254,10 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
                 // Calculate the distance between the curr point and the other point.
                 float distance = Vector3.Distance(curr_pos, other_pos);
-                // If the distance is less than or equal to the calculation step size + stepover, add the index to the list.
-                if (distance <= _calculation_step_size + _stepover)
+                // If the distance is {stepover <= dist <= calcstep+stepover}, add the index to the list.
+                // >=calc+stepover is too far to be considered, and <=stepover are points that are in our immediate trail.
+                // This limits us to instantaneous angle changes of <90deg.
+                if (distance >= _stepover && distance <= _calculation_step_size + _stepover)
                 {
                     sTestworthyIndices.Add(i);
                 }
