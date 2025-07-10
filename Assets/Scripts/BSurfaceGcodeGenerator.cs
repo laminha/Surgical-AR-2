@@ -367,11 +367,8 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             }
         }
 
-        // If nothing was returned, return NaN, unless sticky mode is still on, then return curr_uv.
-        if (sticky_mode)
-            return curr_uv;
-        else
-            return new Vector2(float.NaN, float.NaN);
+        // If nothing was returned, return NaN.
+        return new Vector2(float.NaN, float.NaN);
     }
     /// <summary>
     /// Checks if the next position is valid by checking if it is at least _stepover distance away from every other point in _uv_points.

@@ -64,11 +64,9 @@ public class ConformalToolpathingManager : MonoBehaviour
         _line_renderer.positionCount = _gcode_generator._uv_points.Count + 1; // Set the position count to include the new point.
         _line_renderer.SetPosition(_line_renderer.positionCount - 1, next_point_world);
 
-
-
         // If the A button is pressed, add the next point to the uv points.
         bool add_point_button_pressed = OVRInput.Get(OVRInput.Button.One, OVRInput.Controller.RTouch);
-            // Only add at a rate.
+        // Only add at a rate.
         if (add_point_button_pressed && unaddable == false)
             if (Time.frameCount % 2 == 0)
             {
