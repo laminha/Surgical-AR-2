@@ -51,22 +51,24 @@ public class ConformalToolpathingManager : MonoBehaviour
 
         // Draw the next segment of the toolpath using FindStepoverPoint.
         Vector2 next_uv = _gcode_generator.FindStepoverPoint(transform.position, true);
+        // If the next point is NaN, set it to the previous point and mark the point as unaddable.
+        bool unaddable = false;
+        if (float.IsNaN(next_uv.x) || float.IsNaN(next_uv.y))
+        {
+            next_uv = _gcode_generator._uv_points[^1];
+            unaddable = true;
+        }
         // Add it to the line renderer.
         Vector3 next_point_local = _control_point_obj.CalcBsurface(next_uv.x, next_uv.y);
         Vector3 next_point_world = _control_point_obj.transform.TransformPoint(next_point_local);
         _line_renderer.positionCount = _gcode_generator._uv_points.Count + 1; // Set the position count to include the new point.
         _line_renderer.SetPosition(_line_renderer.positionCount - 1, next_point_world);
 
-        // If the next point is NaN, do not add it.
-        if (float.IsNaN(next_uv.x) || float.IsNaN(next_uv.y))
-        {
-            return;
-        }
 
 
         // If the A button is pressed, add the next point to the uv points.
         bool add_point_button_pressed = OVRInput.Get(OVRInput.Button.One, OVRInput.Controller.RTouch);
-        if (add_point_button_pressed)
+        if (add_point_button_pressed && unaddable == false)
         {
             // Only add at a rate of 1 pointer per 10 frames.
             if (Time.frameCount % 10 == 0)
