@@ -27,7 +27,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             GenerateGcode();
         else
             DrawUVPoints();
-        FindStepoverPoint(_debug_target_pos, out _, true); // The _ means I dont care about the out parameter.
+        FindStepoverPoint(_debug_target_pos, solution_type: SolutionType.CCWSolution, sticky_mode: true); // Colon is named argument syntax for optional parameters.
     }
     void DrawUVPoints()
     {
@@ -188,15 +188,15 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// </summary>
     List<int> sTestworthyIndices;
     Vector2 sPrevUv;
-    public enum FindStepoverPointSolutionType
+    public enum SolutionType
     {
-        NoSolution,
-        CCWSolution,
-        CWSolution,
-        CCWFarSolution,
-        CWFarSolution
+        Any,
+        CCWSolution, // From a valid direction.
+        CWSolution, // From a valid direction.
+        CCWFarSolution, // Ditto, but more than 90deg away from target (currently not implemented).
+        CWFarSolution // Ditto, but more than 90deg away from target (currently not implemented).
     }
-    public Vector2 FindStepoverPoint(Vector3 target_world, out FindStepoverPointSolutionType solution_type, bool sticky_mode = false)
+    public Vector2 FindStepoverPoint(Vector3 target_world, SolutionType solution_type = SolutionType.Any, bool sticky_mode = false)
     {
         // If there are no uv points, add the first point.
         if (_uv_points.Count == 0)
@@ -327,10 +327,15 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
 
                         // Draw a debug line from the current point to the next point in the "shifted" direction.
                         Debug.DrawLine(curr_world, next_world, Color.magenta);
-                        solution_type = ccw_cw_enum == 0 ?
-                            FindStepoverPointSolutionType.CCWSolution :
-                            FindStepoverPointSolutionType.CWSolution;
-                        return next_uv;
+
+                        // Do solution type logic.
+                        if (solution_type == SolutionType.Any)
+                            return next_uv;
+                        if (solution_type == SolutionType.CWSolution && ccw_cw_enum == 0)
+                            return next_uv; // We want to return a cw solution if ccw is selected, because one is in reference to cw from validity, and the other is in reference to ccw from invalidity.
+                        if (solution_type == SolutionType.CCWSolution && ccw_cw_enum == 1)
+                            return next_uv; // Ditto.
+                        // If no solutions are valid & wanted, continue searching.
                     }
                 }
                 else
@@ -342,10 +347,13 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
 
                         Vector3 output_world = _control_point_obj.transform.TransformPoint(_control_point_obj.CalcBsurface(output.x, output.y));
                         Debug.DrawLine(curr_world, output_world, Color.magenta);
-                        solution_type = ccw_cw_enum == 0 ?
-                            FindStepoverPointSolutionType.CCWSolution :
-                            FindStepoverPointSolutionType.CWSolution;
-                        return output;
+
+                        if (solution_type == SolutionType.Any)
+                            return output;
+                        if (solution_type == SolutionType.CCWSolution && ccw_cw_enum == 0)
+                            return output; // In this case, both enums are in reference to ccw from validity.
+                        if (solution_type == SolutionType.CWSolution && ccw_cw_enum == 1)
+                            return output; // Ditto.
                     }
                     else
                     {
@@ -360,7 +368,6 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         }
 
         // If nothing was returned, return NaN, unless sticky mode is still on, then return curr_uv.
-        solution_type = FindStepoverPointSolutionType.NoSolution;
         if (sticky_mode)
             return curr_uv;
         else

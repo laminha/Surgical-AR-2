@@ -50,7 +50,7 @@ public class ConformalToolpathingManager : MonoBehaviour
         }
 
         // Draw the next segment of the toolpath using FindStepoverPoint.
-        Vector2 next_uv = _gcode_generator.FindStepoverPoint(transform.position, out _, true);
+        Vector2 next_uv = _gcode_generator.FindStepoverPoint(transform.position, sticky_mode: true, solution_type: BSurfaceGcodeGenerator.SolutionType.CWSolution);
         // If the next point is NaN, set the preview to the previous point and mark the point as unaddable.
         bool unaddable = false;
         if (float.IsNaN(next_uv.x) || float.IsNaN(next_uv.y))
