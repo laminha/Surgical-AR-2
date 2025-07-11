@@ -7,11 +7,26 @@ public class ConformalToolpathingManager : MonoBehaviour
     public BSurfaceGcodeGenerator _gcode_generator;
     public BsplineManager _control_point_obj;
     public LineRenderer _normal_axis_visual;
-    void Start()
+    void Awake()
     {
         _line_renderer = GetComponent<LineRenderer>();
     }
-
+    void OnDrawGizmos()
+    {
+        Awake();
+        UpdateToolpath();
+    }
+    void UpdateToolpath()
+    {
+        // Update the toolpath line.
+        _line_renderer.positionCount = _gcode_generator._uv_points.Count;
+        for (int i = 0; i < _gcode_generator._uv_points.Count; i++)
+        {
+            Vector3 point_local = _control_point_obj.CalcBsurface(_gcode_generator._uv_points[i].x, _gcode_generator._uv_points[i].y);
+            Vector3 point_world = _control_point_obj.transform.TransformPoint(point_local);
+            _line_renderer.SetPosition(i, point_world);
+        }
+    }
     void Update()
     {
         // Follow the right controller.
@@ -23,18 +38,12 @@ public class ConformalToolpathingManager : MonoBehaviour
         if (_gcode_generator._uv_points.Count != _line_renderer.positionCount - 1 || _gcode_generator._uv_points.Count < 5)
         {
             // Update the toolpath line.
-            _line_renderer.positionCount = _gcode_generator._uv_points.Count;
-            for (int i = 0; i < _gcode_generator._uv_points.Count; i++)
-            {
-                Vector3 point_local = _control_point_obj.CalcBsurface(_gcode_generator._uv_points[i].x, _gcode_generator._uv_points[i].y);
-                Vector3 point_world = _control_point_obj.transform.TransformPoint(point_local);
-                _line_renderer.SetPosition(i, point_world);
-            }
+            UpdateToolpath();
 
             // Get current normal vector.
             if (_gcode_generator._uv_points.Count > 0)
             {
-                Vector2 curr_uv = _gcode_generator._uv_points[_gcode_generator._uv_points.Count - 1];
+                Vector2 curr_uv = _gcode_generator._uv_points[^1];
                 Vector3 curr_pos = _control_point_obj.CalcBsurface(curr_uv.x, curr_uv.y);
                 Vector3 curr_normal_vec = Vector3.Cross(
                     _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y),
@@ -79,5 +88,59 @@ public class ConformalToolpathingManager : MonoBehaviour
         if (delete_point_button_pressed && _gcode_generator._uv_points.Count > 0)
             if (Time.frameCount % 1 == 0)
                 _gcode_generator._uv_points.RemoveAt(_gcode_generator._uv_points.Count - 1);
+    }
+    int DrawConcentricRing(Vector2 start, bool dir_cw, int num_rings = 1)
+    {
+        // Place the target at 90deg rotations from the start point (cw if dir_cw true).
+        float angle = dir_cw ? -90f : 90f;
+        Vector2[] uv_targets = {
+            new Vector2(0.5f, 0.5f) + (Vector2)(Quaternion.Euler(0, 0, angle) * (start - new Vector2(0.5f,0.5f))),
+            new Vector2(0.5f, 0.5f) + (Vector2)(Quaternion.Euler(0, 0, angle * 2) * (start - new Vector2(0.5f,0.5f))),
+            new Vector2(0.5f, 0.5f) + (Vector2)(Quaternion.Euler(0, 0, angle * 3) * (start - new Vector2(0.5f,0.5f))),
+            start
+        };
+
+        // Add a point at the start position.
+            _gcode_generator._uv_points.Add(start);
+
+        // Iterate until the current uv is close to the target uv.
+        BSurfaceGcodeGenerator.SolutionType solution_type = dir_cw ?
+            BSurfaceGcodeGenerator.SolutionType.CCWFarSolution :
+            BSurfaceGcodeGenerator.SolutionType.CWSolution;
+
+        for (int counter_1 = 0; counter_1 < num_rings; counter_1++)
+        {
+            bool point_found = false;
+            for (int i = 0; i < uv_targets.Length; i++)
+            {
+                int counter_2 = 0;
+                while (true)
+                {
+                    // Safety escape.
+                    if (counter_2++ > 1000)
+                    {
+                        Debug.LogError("Safety counter exceeded in DrawConcentricRing inner loop.");
+                        return 1; // Error code: Maxed out on inner loops.
+                    }
+
+                    Vector3 target = _control_point_obj.transform.TransformPoint(_control_point_obj.CalcBsurface(uv_targets[i].x, uv_targets[i].y));
+                    Vector2 next_uv = _gcode_generator.FindStepoverPoint(target, sticky_mode: true, solution_type: solution_type);
+                    if (float.IsNaN(next_uv.x) || float.IsNaN(next_uv.y))
+                    {
+                        if (counter_2 > 1)
+                            point_found = true;
+                        break;
+                    }
+                    _gcode_generator.AddPointsToTargetUvExclusive(next_uv.x, next_uv.y);
+                }
+            }
+
+            // If all of the targets returned NaN immediately, we are done.
+            if (point_found == false)
+            {
+                return 0; // Error code: none.
+            }
+        }
+        return 2; // Error code: Maxed out on outer loops.
     }
 }
