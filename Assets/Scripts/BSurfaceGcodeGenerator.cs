@@ -185,9 +185,10 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     public int _angular_resolution_per_rev = 100;
     /// <summary>
     /// A vector of the indices that are less than or equal to _calculation_step_size + _stepover away from the current position.
+    /// Also that are at least _stepover away from the current position, to differentiate from toolpath immediately behind and distinct toolpath.
     /// </summary>
-    List<int> sTestworthyIndices;
-    Vector2 sPrevUv;
+    List<int> _testworthy_indices;
+    Vector2 _prev_uv;
     public enum SolutionType
     {
         Any,
@@ -217,9 +218,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         // Draw a line from the current point to the target position (in world space).
         Debug.DrawLine(curr_world, target_world, Color.green);
 
-        // Update sPrevUv and store difference in a bool.
-        bool curr_uv_changed = sPrevUv != curr_uv;
-        sPrevUv = curr_uv;
+        // Update _prev_uv and store difference in a bool.
+        bool curr_uv_changed = _prev_uv != curr_uv;
+        _prev_uv = curr_uv;
 
         // Find the uv direction that moves the closest to the target position.
         // We want to do this analytically, not numerically.
@@ -246,13 +247,13 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         // the number 10 is a catch-all, can be reduced probably.
         if (_uv_points.Count < 10)
         {
-            sTestworthyIndices = new();
+            _testworthy_indices = new();
         }
-        // If the current uv point changed, or sTestworthyIndices is null, we need to recalculate the testworthy indices.
-        if (curr_uv_changed || sTestworthyIndices == null)
+        // If the current uv point changed, or _testworthy_indices is null, we need to recalculate the testworthy indices.
+        if (curr_uv_changed || _testworthy_indices == null)
         {
             // Initialize the list of testworthy indices.
-            sTestworthyIndices = new List<int>();
+            _testworthy_indices = new List<int>();
             // Iterate through the uv points.
             for (int i = 0; i < _uv_points.Count; i++)
             {
@@ -267,7 +268,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 // This limits us to instantaneous angle changes of <90deg.
                 if (distance >= _stepover && distance <= _calculation_step_size + _stepover)
                 {
-                    sTestworthyIndices.Add(i);
+                    _testworthy_indices.Add(i);
                 }
             }
         }
@@ -310,8 +311,8 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 Vector3 next_pos = curr_pos + uv_dir_3d;
                 Vector3 next_world = _control_point_obj.transform.TransformPoint(next_pos);
                 // Check if next_uv is inside the circle inscribing the BSurface.
-                // Check if it is too close to any other point in _uv_points[sTestworthyIndices].
-                bool is_valid = (Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f) && IsValidPos(sTestworthyIndices, next_pos);
+                // Check if it is too close to any other point in _uv_points[_testworthy_indices].
+                bool is_valid = (Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f) && IsValidPos(next_pos);
 
                 // In sticky mode, we only want to return the point if it is next to an invalid point.
                 // If the initial guess is invalid, we want to turn sticky mode off, because the next valid point is gurenteed to be a sticky one.
@@ -366,18 +367,23 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 }
             }
         }
-
+ 
         // If nothing was returned, return NaN.
         return new Vector2(float.NaN, float.NaN);
     }
     /// <summary>
     /// Checks if the next position is valid by checking if it is at least _stepover distance away from every other point in _uv_points.
     /// </summary>
-    bool IsValidPos(in List<int> testworthy_indices, in Vector3 next_pos)
+    bool IsValidPos(in Vector3 next_pos)
     {
-        for (int i_uv = 0; i_uv < testworthy_indices.Count; i_uv++)
+        for (int i_uv = 0; i_uv < _testworthy_indices.Count; i_uv++)
         {
-            Vector2 other_uv = _uv_points[testworthy_indices[i_uv]];
+            if (_testworthy_indices[i_uv] > _uv_points.Count - 1)
+            {
+                _testworthy_indices.RemoveAt(i_uv);
+                continue;
+            }
+            Vector2 other_uv = _uv_points[_testworthy_indices[i_uv]];
             // Calculate the 3D position of the other uv point.
             Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
             // Calculate the distance between the next point and the other point.
