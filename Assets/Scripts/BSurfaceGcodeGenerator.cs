@@ -329,6 +329,18 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                         // Draw a debug line from the current point to the next point in the "shifted" direction.
                         Debug.DrawLine(curr_world, next_world, Color.magenta);
 
+                        if (_uv_points.Count >= 2)
+                        {
+                            // If solution is more than 90deg turn from last point, we want to skip it.
+                            Vector3 angle1  = -curr_pos + next_pos;
+                            Vector3 prev_pos = _control_point_obj.CalcBsurface(_uv_points[^2].x, _uv_points[^2].y); // ^2 is the point before curr.
+                            Vector2 angle2 = -prev_pos + curr_pos; // ^2 is point before curr.
+                            float dot = Vector2.Dot(angle1, angle2);
+                            // If the dot product is negative, segments are >90deg trajectory change.
+                            if (dot < 0)
+                                continue;
+                        }
+
                         // Do solution type logic.
                         if (solution_type == SolutionType.Any)
                             return next_uv;
