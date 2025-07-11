@@ -27,7 +27,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             GenerateGcode();
         else
             DrawUVPoints();
-        FindStepoverPoint(_debug_target_pos, solution_type: SolutionType.CCWSolution, sticky_mode: true); // Colon is named argument syntax for optional parameters.
+        FindStepoverPoint(_debug_target_pos, solution_type: SolutionType.Any, sticky_mode: false); // Colon is named argument syntax for optional parameters.
     }
     void DrawUVPoints()
     {
@@ -210,10 +210,6 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         Vector2 curr_uv = _uv_points[^1]; // Last index.
         Vector3 curr_pos = _control_point_obj.CalcBsurface(curr_uv.x, curr_uv.y);
         Vector3 curr_world = _control_point_obj.transform.TransformPoint(curr_pos);
-        // Vector3 normal = -Vector3.Cross(
-        //     _control_point_obj.CalcBSurfaceVelocityU(curr_uv.x, curr_uv.y),
-        //     _control_point_obj.CalcBSurfaceVelocityV(curr_uv.x, curr_uv.y)
-        // ).normalized;
 
         // Draw a line from the current point to the target position (in world space).
         Debug.DrawLine(curr_world, target_world, Color.green);
@@ -241,7 +237,6 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         float uv_dir_closest_surf_angle = Mathf.Atan2(proj_v, proj_u);
         float uv_dir_closest_uv_angle = Mathf.Atan2(v_dir, u_dir);
         // Print the angles for debugging.
-        // Debug.Log($"Angle surface: {uv_dir_closest_surf_angle * Mathf.Rad2Deg}deg, Angle uv: {uv_dir_closest_uv_angle * Mathf.Rad2Deg}deg");
 
         // If _uv_points is emptyish, reset the testworthy indices.
         // the number 10 is a catch-all, can be reduced probably.
@@ -288,7 +283,10 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                     theta_shift_wanted = -theta_shift_wanted;
 
                 // Calculate the uv angle shift that corresponds to a 3D angle shift of theta_shift.
-                float theta_shift_uv = SurfaceAngleToUVAngle(uv_dir_closest_surf_angle + theta_shift_wanted, velo_u.magnitude, velo_v.magnitude) - uv_dir_closest_uv_angle;
+                float theta_shift_uv = SurfaceAngleToUVAngle(
+                    uv_dir_closest_surf_angle + theta_shift_wanted,
+                    velo_u, velo_v)
+                     - uv_dir_closest_uv_angle;
 
                 // Calculate the shifted uv as uv_closest rotated by theta_shift.
                 Vector2 uv_dir_shifted = new(
@@ -310,6 +308,10 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 Vector2 next_uv = curr_uv + uv_dir_shifted;
                 Vector3 next_pos = curr_pos + uv_dir_3d;
                 Vector3 next_world = _control_point_obj.transform.TransformPoint(next_pos);
+                // Draw the tested line in the scene view for debugging.
+                if (i == 0)
+                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 3), Color.cyan);
+                Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 2), Color.grey);
                 // Check if next_uv is inside the circle inscribing the BSurface.
                 // Check if it is too close to any other point in _uv_points[_testworthy_indices].
                 bool is_valid = (Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f) && IsValidPos(next_pos);
@@ -326,20 +328,32 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                         // Print wanted and actual theta shift for debugging.
                         // Debug.Log($"Wanted theta shift: {theta_shift_wanted}, Actual theta shift: {theta_shift_uv}");
 
-                        // Draw a debug line from the current point to the next point in the "shifted" direction.
-                        Debug.DrawLine(curr_world, next_world, Color.magenta);
-
                         if (_uv_points.Count >= 2)
                         {
                             // If solution is more than 90deg turn from last point, we want to skip it.
-                            Vector3 angle1  = -curr_pos + next_pos;
+                            Vector3 angle1 = -curr_pos + next_pos;
                             Vector3 prev_pos = _control_point_obj.CalcBsurface(_uv_points[^2].x, _uv_points[^2].y); // ^2 is the point before curr.
-                            Vector2 angle2 = -prev_pos + curr_pos; // ^2 is point before curr.
-                            float dot = Vector2.Dot(angle1, angle2);
+                            Vector3 angle2 = -prev_pos + curr_pos; // ^2 is point before curr.
+                            float dot = Vector3.Dot(angle1, angle2);
                             // If the dot product is negative, segments are >90deg trajectory change.
                             if (dot < 0)
+                            {
+                                // Draw line.
+                                Debug.DrawLine(curr_world, next_world, Color.purple);
+                                if (i == 0)
+                                {
+                                    // Draw a line from prev, to curr, to next, to visualize the trajectory change.
+                                    Vector3 prev_world = _control_point_obj.transform.TransformPoint(prev_pos);
+                                    Debug.DrawLine(prev_world, curr_world, Color.blue);
+                                    Debug.DrawLine(curr_world, next_world, Color.red);
+                                    Debug.DrawLine(prev_world, next_world, Color.green);
+                                }
                                 continue;
+                            }
                         }
+
+                        // Draw a debug line from the current point to the next point in the "shifted" direction.
+                        Debug.DrawLine(curr_world, next_world, Color.magenta);
 
                         // Do solution type logic.
                         if (solution_type == SolutionType.Any)
@@ -406,13 +420,32 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         }
         return true;
     }
-    float SurfaceAngleToUVAngle(float surface_angle, float velo_u_mag, float velo_v_mag)
+    /// <summary>
+    /// Converts an angle in 3D space, relative to velo_u on the surface tangent plane, to an angle in uv space.
+    /// </summary>
+    float SurfaceAngleToUVAngle(float surface_angle, Vector3 velo_u, Vector3 velo_v)
     {
-        float sin_theta = Mathf.Sin(surface_angle);
-        float cos_theta = Mathf.Cos(surface_angle);
-        float2 tan2 = new(cos_theta, sin_theta);
-        tan2.x *= velo_v_mag;
-        tan2.y *= velo_u_mag;
-        return Mathf.Atan2(tan2.y, tan2.x);
+        // Turn the 3D velocity vectors into their 2D tangent plane counterparts (x axis alligned with velo_u).
+        Vector2 velo_u_tangent = new(velo_u.magnitude, 0);
+        float angle_between_velo_uv = Vector3.SignedAngle(velo_u, velo_v, Vector3.Cross(velo_u, velo_v));
+        // Convert from degrees to radians (took an hour to figure out).
+        Vector2 velo_v_tangent = new(
+            velo_v.magnitude * Mathf.Cos(angle_between_velo_uv * Mathf.Deg2Rad),
+            velo_v.magnitude * Mathf.Sin(angle_between_velo_uv * Mathf.Deg2Rad)
+        );
+
+        // Perform arithmetic.
+        // Find the tan2 of the requested angle.
+        float2 tan2_surface = new(Mathf.Cos(surface_angle), Mathf.Sin(surface_angle));
+        // Apply inverse transformation (the one that takes u&v's velo_tangents to unit vectors).
+        // Transformation matrix takes the form, [ vy -vx ; -uy ux ] / ux*vy-uy*vx.
+        float2 tan2_uv = new(
+            tan2_surface.x * velo_v_tangent.y - tan2_surface.y * velo_v_tangent.x,
+            -tan2_surface.x * velo_u_tangent.y + tan2_surface.y * velo_u_tangent.x
+        );
+
+        // We dont need to divide by the determinant because it doesnt change the angle.
+        // Undo tan2 to get the angle in uv space.
+        return Mathf.Atan2(tan2_uv.y, tan2_uv.x);
     }
 }

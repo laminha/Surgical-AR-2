@@ -89,8 +89,13 @@ public class ConformalToolpathingManager : MonoBehaviour
             if (Time.frameCount % 1 == 0)
                 _gcode_generator._uv_points.RemoveAt(_gcode_generator._uv_points.Count - 1);
     }
-    int DrawConcentricRing(Vector2 start, bool dir_cw, int num_rings = 1)
+    [ContextMenu("DrawConcentricRings")]
+    int DrawConcentricRing(/*Vector2 start, bool dir_cw, int num_rings = 1*/)
     {
+        Vector2 start = new Vector2(0, 0.5f);
+        bool dir_cw = false;
+        int num_rings = 3;
+
         // Place the target at 90deg rotations from the start point (cw if dir_cw true).
         float angle = dir_cw ? -90f : 90f;
         Vector2[] uv_targets = {

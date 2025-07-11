@@ -30,7 +30,7 @@ public class BsplineManager : MonoBehaviour
             for (int v = 0; v < _control_points.GetLength(0); v++)
                 _control_points[u, v] = new Vector3(
                     -0.1f + 0.2f * u / (_control_points.GetLength(0) - 1),
-                    -0.075f + UnityEngine.Random.Range(-0.025f, 0.025f),
+                    -0.075f,// + UnityEngine.Random.Range(-0.025f, 0.025f),
                     -0.1f + 0.2f * v / (_control_points.GetLength(0) - 1)
                 );
     }
