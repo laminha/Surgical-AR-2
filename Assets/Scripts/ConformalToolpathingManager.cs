@@ -115,6 +115,11 @@ public class ConformalToolpathingManager : MonoBehaviour
 
         for (int counter_1 = 0; counter_1 < num_rings; counter_1++)
         {
+            if (counter_1 > 1000)
+            {
+                Debug.LogError("Safety counter exceeded in DrawConcentricRing outer loop.");
+                return 2; // Error code: Maxed out on outer loops.
+            }
             bool point_found = false;
             for (int i = 0; i < uv_targets.Length; i++)
             {
@@ -143,9 +148,9 @@ public class ConformalToolpathingManager : MonoBehaviour
             // If all of the targets returned NaN immediately, we are done.
             if (point_found == false)
             {
-                return 0; // Error code: none.
+                return 0; // Error code: none concentric rings terminated in center successfully.
             }
         }
-        return 2; // Error code: Maxed out on outer loops.
+        return 3; // Error code: none, partial concentric rings completed successfully.
     }
 }
