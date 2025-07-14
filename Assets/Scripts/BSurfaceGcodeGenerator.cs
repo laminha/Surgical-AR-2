@@ -206,7 +206,8 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         Vector2 start_uv = new(),
         Vector3 target_world = new(),
         byte solution_requested = 0b1111,
-        bool sticky_mode = false)
+        bool sticky_mode = false,
+        bool limit_90deg_turns = true)
     {
         // Handle case where _uv_points is empty.
         if (_uv_points.Count == 0)
@@ -363,9 +364,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                         // Print wanted and actual theta shift for debugging.
                         // Debug.Log($"Wanted theta shift: {theta_shift_wanted}, Actual theta shift: {theta_shift_uv}");
 
-                        if (_uv_points.Count >= 2)
+                        // If solution is more than 90deg turn from last point (&& option enabled), we want to skip it.
+                        if (_uv_points.Count >= 2 && limit_90deg_turns)
                         {
-                            // If solution is more than 90deg turn from last point, we want to skip it.
                             Vector3 angle1 = -curr_pos + next_pos;
                             Vector3 prev_pos = _control_point_obj.CalcBsurface(_uv_points[^2].x, _uv_points[^2].y); // ^2 is the point before curr.
                             Vector3 angle2 = -prev_pos + curr_pos; // ^2 is point before curr.
@@ -424,9 +425,33 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                     {
                         // Impossible for prevs to be uninitialized as i > 0 is guaranteed.
                         Vector2 output_uv = (ccw_cw_enum == 0) ? prev_ccw_valid_uv : prev_cw_valid_uv;
-
-                        Vector3 output_world = _control_point_obj.transform.TransformPoint(_control_point_obj.CalcBsurface(output_uv.x, output_uv.y));
+                        Vector3 output_pos = _control_point_obj.CalcBsurface(output_uv.x, output_uv.y);
+                        Vector3 output_world = _control_point_obj.transform.TransformPoint(output_pos);
                         Debug.DrawLine(curr_world, output_world, Color.magenta);
+
+                        // If solution is more than 90deg turn from last point (&& option enabled), we want to skip it.
+                        if (_uv_points.Count >= 2 && limit_90deg_turns)
+                        {
+                            Vector3 angle1 = -curr_pos + output_pos;
+                            Vector3 prev_pos = _control_point_obj.CalcBsurface(_uv_points[^2].x, _uv_points[^2].y); // ^2 is the point before curr.
+                            Vector3 angle2 = -prev_pos + curr_pos; // ^2 is index, count - 2.
+                            float dot = Vector3.Dot(angle1, angle2);
+                            // If the dot product is negative, segments are >90deg trajectory change.
+                            if (dot < 0)
+                            {
+                                // Draw line.
+                                Debug.DrawLine(curr_world, next_world, Color.purple);
+                                if (i == 0)
+                                {
+                                    // Draw a line from prev, to curr, to next, to visualize the trajectory change.
+                                    Vector3 prev_world = _control_point_obj.transform.TransformPoint(prev_pos);
+                                    Debug.DrawLine(prev_world, curr_world, Color.blue);
+                                    Debug.DrawLine(curr_world, next_world, Color.red);
+                                    Debug.DrawLine(prev_world, next_world, Color.green);
+                                }
+                                continue;
+                            }
+                        }
 
                         // Find current solution type.
                         // Reminder, bit 0 is cw, bit 1 is ccw, bit 2 is closer, bit 3 is farther.
@@ -466,6 +491,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         solution_returned = 0;
         return new Vector2(float.NaN, float.NaN);
     }
+    
     /// <summary>
     /// Checks if the next position is valid by checking if it is at least _stepover distance away from every other point in _uv_points.
     /// </summary>
@@ -489,6 +515,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         }
         return true;
     }
+
     /// <summary>
     /// Converts an angle in 3D space, relative to velo_u on the surface tangent plane, to an angle in uv space.
     /// </summary>
