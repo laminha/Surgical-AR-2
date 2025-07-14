@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using Unity.Mathematics;
-using System;
 
 public class BSurfaceGcodeGenerator : MonoBehaviour
 {
@@ -34,7 +33,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             solution_requested: 0b0111,
             sticky_mode: false
         ); // Colon is named argument syntax for optional parameters.
-        Debug.Log($"FindStepoverPoint returned: {Convert.ToString(fsp_output, 2).PadLeft(4, '0')}");
+        // Debug.Log($"FindStepoverPoint returned: {Convert.ToString(fsp_output, 2).PadLeft(4, '0')}");
     }
     void DrawUVPoints()
     {
@@ -204,10 +203,23 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// </param>
     public Vector2 FindStepoverPoint(
         out byte solution_returned,
+        Vector2 start_uv = new(),
         Vector3 target_world = new(),
         byte solution_requested = 0b1111,
         bool sticky_mode = false)
     {
+        // Handle case where _uv_points is empty.
+        if (_uv_points.Count == 0)
+        {
+            Debug.LogWarning("FindStepoverPoint called with no uv points. Returning NaN.");
+            solution_returned = 0;
+            return new Vector2(float.NaN, float.NaN);
+        }
+
+        // Handle default start_uv.
+        if (start_uv == new Vector2())
+            start_uv = _uv_points.Count > 0 ? _uv_points[^1] : new Vector2(0, 0.5f);
+
         // Process solution_requested.
         bool cw_is_valid = (solution_requested & 0b0001) != 0;
         bool ccw_is_valid = (solution_requested & 0b0010) != 0;
@@ -231,7 +243,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
 
         // Define variables.
         Vector3 target_pos = _control_point_obj.transform.InverseTransformPoint(target_world);
-        Vector2 curr_uv = _uv_points[^1]; // Last index.
+        Vector2 curr_uv = start_uv; // Last index.
         Vector3 curr_pos = _control_point_obj.CalcBsurface(curr_uv.x, curr_uv.y);
         Vector3 curr_world = _control_point_obj.transform.TransformPoint(curr_pos);
 
