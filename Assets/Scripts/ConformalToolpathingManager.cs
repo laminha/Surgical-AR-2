@@ -59,7 +59,10 @@ public class ConformalToolpathingManager : MonoBehaviour
         }
 
         // Draw the next segment of the toolpath using FindStepoverPoint.
-        Vector2 next_uv = _gcode_generator.FindStepoverPoint(transform.position, sticky_mode: false, solution_type: BSurfaceGcodeGenerator.SolutionType.Any);
+        Vector2 next_uv = _gcode_generator.FindStepoverPoint(out _,
+            target_world: transform.position,
+            sticky_mode: false,
+            solution_requested: 0b1111);
         // If the next point is NaN, set the preview to the previous point and mark the point as unaddable.
         bool unaddable = false;
         if (float.IsNaN(next_uv.x) || float.IsNaN(next_uv.y))
@@ -106,13 +109,15 @@ public class ConformalToolpathingManager : MonoBehaviour
         };
 
         // Add a point at the start position.
-            _gcode_generator._uv_points.Add(start);
+        _gcode_generator._uv_points.Add(start);
+
+        // Set solution type based on concentric path direction (solution dir is opposite of concentric dir).
+        // Reminder: bit 0 is cw, bit 1 is ccw, bit 2 is closer, bit 3 is farther.
+        byte solution_type = dir_cw ?
+            (byte)0b0110 :
+            (byte)0b0101;
 
         // Iterate until the current uv is close to the target uv.
-        BSurfaceGcodeGenerator.SolutionType solution_type = dir_cw ?
-            BSurfaceGcodeGenerator.SolutionType.CCWFarSolution :
-            BSurfaceGcodeGenerator.SolutionType.CWSolution;
-
         for (int counter_1 = 0; counter_1 < num_rings; counter_1++)
         {
             if (counter_1 > 1000)
@@ -134,7 +139,7 @@ public class ConformalToolpathingManager : MonoBehaviour
                     }
 
                     Vector3 target = _control_point_obj.transform.TransformPoint(_control_point_obj.CalcBsurface(uv_targets[i].x, uv_targets[i].y));
-                    Vector2 next_uv = _gcode_generator.FindStepoverPoint(target, sticky_mode: true, solution_type: solution_type);
+                    Vector2 next_uv = _gcode_generator.FindStepoverPoint(out _, target_world: target, sticky_mode: true, solution_requested: solution_type);
                     if (float.IsNaN(next_uv.x) || float.IsNaN(next_uv.y))
                     {
                         if (counter_2 > 1)

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using Unity.Mathematics;
+using System;
 
 public class BSurfaceGcodeGenerator : MonoBehaviour
 {
@@ -27,7 +28,13 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             GenerateGcode();
         else
             DrawUVPoints();
-        FindStepoverPoint(_debug_target_pos, solution_type: SolutionType.Any, sticky_mode: false); // Colon is named argument syntax for optional parameters.
+        FindStepoverPoint(
+            out byte fsp_output,
+            target_world: _debug_target_pos,
+            solution_requested: 0b0111,
+            sticky_mode: false
+        ); // Colon is named argument syntax for optional parameters.
+        Debug.Log($"FindStepoverPoint returned: {Convert.ToString(fsp_output, 2).PadLeft(4, '0')}");
     }
     void DrawUVPoints()
     {
@@ -177,32 +184,49 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             _uv_points.Add(current_position + uv_step);
         }
     }
-    /// <summary>
-    /// Given a 3D target position, finds the uv point that corresponds to the 3D point such that: the point is _calculation_step_size distance away from the last point in _uv_points, the point is at least _stepover distance away from the every other point in _uv_points, and the point is closest of its kind to the target position. Function returns the last uv point if all valid solutions are farther away from target position than the last uv point.
-    /// Sticky mode only returns extremes, ie. solutions that are next to an invalid solution.
-    /// </summary>
     public Vector3 _debug_target_pos;
     public int _angular_resolution_per_rev = 100;
+    Vector2 _prev_uv;
     /// <summary>
     /// A vector of the indices that are less than or equal to _calculation_step_size + _stepover away from the current position.
     /// Also that are at least _stepover away from the current position, to differentiate from toolpath immediately behind and distinct toolpath.
     /// </summary>
     List<int> _testworthy_indices;
-    Vector2 _prev_uv;
-    public enum SolutionType
+    /// <summary>
+    /// Given a 3D target position, finds the uv point that corresponds to the 3D point such that: the point is _calculation_step_size distance away from the last point in _uv_points, the point is at least _stepover distance away from the every other point in _uv_points, and the point is closest of its kind to the target position. Function returns the last uv point if all valid solutions are farther away from target position than the last uv point.
+    /// Sticky mode only returns extremes, ie. solutions that are next to an invalid solution.
+    /// </summary>
+    /// <param name="solution_type">
+    /// Each bit of byte says whether to include a certain type of solution: 1=cw, 2=ccw, 3=closer, 4=farther.
+    /// </param>
+    /// <param name="solution_requested">
+    /// Each bit of byte describes a type of solution returned: 0=cw, 1=ccw, 2=closer, 3=farther.
+    /// </param>
+    public Vector2 FindStepoverPoint(
+        out byte solution_returned,
+        Vector3 target_world = new(),
+        byte solution_requested = 0b1111,
+        bool sticky_mode = false)
     {
-        Any,
-        CCWSolution, // From a valid direction.
-        CWSolution, // From a valid direction.
-        CCWFarSolution, // Ditto, but more than 90deg away from target (currently not implemented).
-        CWFarSolution // Ditto, but more than 90deg away from target (currently not implemented).
-    }
-    public Vector2 FindStepoverPoint(Vector3 target_world, SolutionType solution_type = SolutionType.Any, bool sticky_mode = false)
-    {
-        // If there are no uv points, add the first point.
+        // Process solution_requested.
+        bool cw_is_valid = (solution_requested & 0b0001) != 0;
+        bool ccw_is_valid = (solution_requested & 0b0010) != 0;
+        bool closer_is_valid = (solution_requested & 0b0100) != 0;
+        bool farther_is_valid = (solution_requested & 0b1000) != 0;
+        // Escape with warning if no valid solutions are requested.
+        if ((!cw_is_valid && !ccw_is_valid) || (!closer_is_valid && !farther_is_valid))
+        {
+            Debug.LogWarning("FindStepoverPoint called with no valid solutions requested. Returning NaN.");
+            solution_returned = 0;
+            return new Vector2(float.NaN, float.NaN);
+        }
+
+        // If there are no uv points, return error.
         if (_uv_points.Count == 0)
         {
-            _uv_points.Add(new Vector2(0f, 0.5f));
+            Debug.LogWarning("FindStepoverPoint called with no uv points. Returning NaN.");
+            solution_returned = 0;
+            return new Vector2(float.NaN, float.NaN);
         }
 
         // Define variables.
@@ -268,11 +292,10 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             }
         }
 
-        // Perform linear search on the two quarters next to the initial guess.
-        // Precomputations.
+        // Perform linear search on the two 360s next to the initial guess.
         Vector2 prev_ccw_valid_uv = new();
         Vector2 prev_cw_valid_uv = new();
-        for (int i = 0; i <= _angular_resolution_per_rev / 4; i++)
+        for (int i = 0; i <= _angular_resolution_per_rev; i++)
         {
             // Perform 1 CCW and 1 CW shift+test every outerloop, starting with CCW.
             for (int ccw_cw_enum = 0; ccw_cw_enum < 2; ccw_cw_enum++)
@@ -319,7 +342,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 // In sticky mode, we only want to return the point if it is next to an invalid point.
                 // If the initial guess is invalid, we want to turn sticky mode off, because the next valid point is gurenteed to be a sticky one.
                 if (i == 0 && is_valid == false)
-                    sticky_mode = false;
+                    sticky_mode = false; // This bool will never be turned on after this.
                 // Handle sticky mode logic.
                 if (sticky_mode == false)
                 {
@@ -355,14 +378,31 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                         // Draw a debug line from the current point to the next point in the "shifted" direction.
                         Debug.DrawLine(curr_world, next_world, Color.magenta);
 
-                        // Do solution type logic.
-                        if (solution_type == SolutionType.Any)
+                        // Find current solution type.
+                        // Reminder, bit 0 is cw, bit 1 is ccw, bit 2 is closer, bit 3 is farther.
+                        byte curr_solution_type = 0;
+                        // Set based on cw,cww-ness.
+                        if (i == 0)
+                            // If this is the first loop, the solution is neither cw nor ccw (ie. will be accepted regardless).
+                            curr_solution_type |= 0b0000;
+                        else
+                            if (ccw_cw_enum == 0)
+                            curr_solution_type |= 0b0001; // ccw_enum represents cw solution in this case (stickymode == false).
+                        else
+                            curr_solution_type |= 0b0010; // Vise versa.
+                        // Set based on closer-ness.
+                        if (Vector3.Distance(next_world, target_world) < Vector3.Distance(curr_world, target_world)) // ie. closer.
+                            curr_solution_type |= 0b0100; // Closer.
+                        else
+                            curr_solution_type |= 0b1000; // Farther.
+
+                        // If every 1 in curr_solution_type is also in solution_requested, return the point.
+                        if ((curr_solution_type & solution_requested) == curr_solution_type)
+                        {
+                            solution_returned = curr_solution_type;
                             return next_uv;
-                        if (solution_type == SolutionType.CWSolution && ccw_cw_enum == 0)
-                            return next_uv; // We want to return a cw solution if ccw is selected, because one is in reference to cw from validity, and the other is in reference to ccw from invalidity.
-                        if (solution_type == SolutionType.CCWSolution && ccw_cw_enum == 1)
-                            return next_uv; // Ditto.
-                        // If no solutions are valid & wanted, continue searching.
+                        }
+                        // If no solutions are valid & requested, continue searching.
                     }
                 }
                 else
@@ -370,31 +410,48 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                     // We need to find the next invalid point, then return the previous valid point in that direction.
                     if (is_valid == false)
                     {
-                        Vector2 output = (ccw_cw_enum == 0) ? prev_ccw_valid_uv : prev_cw_valid_uv;
+                        // Impossible for prevs to be uninitialized as i > 0 is guaranteed.
+                        Vector2 output_uv = (ccw_cw_enum == 0) ? prev_ccw_valid_uv : prev_cw_valid_uv;
 
-                        Vector3 output_world = _control_point_obj.transform.TransformPoint(_control_point_obj.CalcBsurface(output.x, output.y));
+                        Vector3 output_world = _control_point_obj.transform.TransformPoint(_control_point_obj.CalcBsurface(output_uv.x, output_uv.y));
                         Debug.DrawLine(curr_world, output_world, Color.magenta);
 
-                        if (solution_type == SolutionType.Any)
-                            return output;
-                        if (solution_type == SolutionType.CCWSolution && ccw_cw_enum == 0)
-                            return output; // In this case, both enums are in reference to ccw from validity.
-                        if (solution_type == SolutionType.CWSolution && ccw_cw_enum == 1)
-                            return output; // Ditto.
-                    }
-                    else
-                    {
-                        // Update the corresponding previous valid point.
-                        if (ccw_cw_enum == 0)
-                            prev_ccw_valid_uv = next_uv;
+                        // Find current solution type.
+                        // Reminder, bit 0 is cw, bit 1 is ccw, bit 2 is closer, bit 3 is farther.
+                        byte curr_solution_type = 0;
+                        // Set based on cw,cww-ness.
+                        if (i == 0)
+                            // If this is the first loop, the solution is neither cw nor ccw (ie. will be accepted regardless).
+                            curr_solution_type |= 0b0000;
                         else
-                            prev_cw_valid_uv = next_uv;
+                            if (ccw_cw_enum == 0)
+                            curr_solution_type |= 0b0010; // ccw_enum represents ccw solution in this case (stickymode == true).
+                        else
+                            curr_solution_type |= 0b0001; // Vise versa.
+                        // Set based on closer-ness.
+                        if (Vector3.Distance(output_world, target_world) < Vector3.Distance(curr_world, target_world)) // ie. closer.
+                            curr_solution_type |= 0b0100; // Closer.
+                        else
+                            curr_solution_type |= 0b1000; // Farther.
+
+                        // If every 1 in curr_solution_type is also in solution_requested, return the point.
+                        if ((curr_solution_type & solution_requested) == curr_solution_type)
+                        {
+                            solution_returned = curr_solution_type;
+                            return output_uv;
+                        }
                     }
+                    // Update the corresponding previous valid point.
+                    if (ccw_cw_enum == 0)
+                        prev_ccw_valid_uv = next_uv;
+                    else
+                        prev_cw_valid_uv = next_uv;
                 }
             }
         }
- 
+
         // If nothing was returned, return NaN.
+        solution_returned = 0;
         return new Vector2(float.NaN, float.NaN);
     }
     /// <summary>
