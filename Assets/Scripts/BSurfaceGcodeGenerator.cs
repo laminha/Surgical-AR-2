@@ -44,7 +44,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         {
             Vector3 start = transform.TransformPoint(_control_point_obj.CalcBsurface(_uv_points[i].x, _uv_points[i].y));
             Vector3 end = transform.TransformPoint(_control_point_obj.CalcBsurface(_uv_points[i + 1].x, _uv_points[i + 1].y));
-            bool is_white = Mathf.Floor(editor_time_mod1 * 8) == i % 8;
+            bool is_white = Mathf.Floor(editor_time_mod1 * 10) == i % 10 || i % 10 == 0;
             Debug.DrawLine(start, end, is_white ? Color.white : Color.black);
         }
     }
@@ -139,6 +139,12 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// </summary>
     public void AddPointsToTargetUvExclusive(float u, float v)
     {
+        if (float.IsNaN(u) || float.IsNaN(v))
+        {
+            Debug.LogError("AddPointsToTargetUvExclusive called with NaN values. Exiting.");
+            return;
+        }
+
         int counter = 0;
         while (true)
         {
