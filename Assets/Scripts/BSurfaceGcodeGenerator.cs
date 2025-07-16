@@ -27,7 +27,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         FindStepoverPoint(
             out byte fsp_output,
             target_world: _debug_target_pos,
-            solution_requested: 0b1111,
+            solution_requested: 0b1101,
             sticky_mode: true
         ); // Colon is named argument syntax for optional parameters.
         // Debug.Log($"FindStepoverPoint returned: {Convert.ToString(fsp_output, 2).PadLeft(4, '0')}");
@@ -322,20 +322,29 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                 uv_dir_shifted *= _calculation_step_size;
                 uv_dir_3d = _calculation_step_size * uv_dir_3d.normalized;
 
-                // Check if it is valid.
+                // Calculate the next position in uv space and 3D space.
                 Vector2 next_uv = curr_uv + uv_dir_shifted;
                 Vector3 next_pos = curr_pos + uv_dir_3d;
                 Vector3 next_world = _control_point_obj.transform.TransformPoint(next_pos);
+
                 // Draw the tested line in the scene view for debugging.
                 if (i == 0)
-                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 3), Color.cyan);
-                Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 2), Color.grey);
+                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 2f), Color.cyan);
+
+                // Check if next_uv is valid.
+                bool is_valid = true;
 
                 // Check if next_uv is inside the circle inscribing the BSurface.
-                bool is_valid = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
+                if (Vector2.Distance(new(0.5f, 0.5f), next_uv) > 0.5f) {
+                    is_valid = false;
+                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.6f), Color.red);
+                }
 
                 // Check if it is too close to any other point in _uv_points[_testworthy_indices].
-                is_valid = is_valid && IsValidPos(next_pos);
+                if (IsValidPos(next_pos) == false) {
+                    is_valid = false;
+                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.4f), Color.grey);
+                }
 
                 // Check if the turn is more than 90deg.
                 if (_uv_points.Count >= 2 && limit_90deg_turns) {
@@ -346,6 +355,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                     // If the dot product is negative, segments are >90deg trajectory change.
                     if (dot < 0) {
                         is_valid = false;
+                        Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.2f), Color.purple);
                     }
                 }
 
@@ -364,22 +374,22 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                         curr_solution_type |= 0b0010; // Vise versa.
                     else
                         curr_solution_type |= 0b0001; // Vise versa.
-                // Set based on closer-ness.
+                                                      // Set based on closer-ness.
                 if (Vector3.Distance(next_world, target_world) < Vector3.Distance(curr_world, target_world))
                     curr_solution_type |= 0b0100; // Closer.
                 else
                     curr_solution_type |= 0b1000; // Farther.
-                // If every set flag in curr_solution_type is not also set in solution_requested, the point is invalid.
+                                                  // If every set flag in curr_solution_type is not also set in solution_requested, the point is invalid.
                 if ((curr_solution_type & solution_requested) != curr_solution_type) {
                     is_valid = false;
+                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1f), Color.orange);
                 }
-
 
                 // In sticky mode, we only want to return the point if it is next to an invalid point.
                 // If the initial guess is invalid, we want to turn sticky mode off, because the next valid point is gurenteed to be a sticky one.
                 if (i == 0 && is_valid == false)
                     sticky_mode = false; // This bool will never be turned on after this.
-                // Handle sticky mode logic.
+                                         // Handle sticky mode logic.
                 if (sticky_mode == false) {
                     if (is_valid == true) {
                         // Draw a debug line from the current point to the next point in the "shifted" direction.
@@ -389,8 +399,11 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                     }
                 }
                 else {
-                    // We need to find the next invalid point, then return the previous valid point in that direction.
-                    if (is_valid == false) {
+                    // We need to find the next invalid point, which is also in the direction we requested,
+                    // then return the previous valid point in that direction.
+                    bool curr_direction_is_valid = cw_is_valid && (ccw_cw_enum == 1) ||
+                                                  ccw_is_valid && (ccw_cw_enum == 0);
+                    if (is_valid == false && curr_direction_is_valid) {
                         // Impossible for prevs to be uninitialized as i > 0 is guaranteed.
                         Vector2 output_uv = (ccw_cw_enum == 0) ? prev_ccw_valid_uv : prev_cw_valid_uv;
                         Vector3 output_pos = _control_point_obj.CalcBsurface(output_uv.x, output_uv.y);
