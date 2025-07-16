@@ -15,10 +15,16 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
     private string _file_name;
     private string _file_path;
     public OVRCameraRig _tracking_space;
+
+
+
     void Start() {
         _file_name = "BSurface.gcode";
         _file_path = Path.Combine(Application.persistentDataPath, _file_name);
     }
+
+
+
     void OnDrawGizmos() {
         if (_uv_points.Count == 0)
             GenerateGcode();
@@ -26,12 +32,16 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
             DrawUVPoints();
         FindStepoverPoint(
             out byte fsp_output,
+            out int index_of_collided,
             target_world: _debug_target_pos,
-            solution_requested: 0b1101,
-            sticky_mode: true
+            solution_requested: 0b1111,
+            sticky_mode: false
         ); // Colon is named argument syntax for optional parameters.
         // Debug.Log($"FindStepoverPoint returned: {Convert.ToString(fsp_output, 2).PadLeft(4, '0')}");
+        Debug.Log($"Index of collided: {index_of_collided}");
     }
+
+
     void DrawUVPoints() {
         float editor_time_mod1 = (float)EditorApplication.timeSinceStartup % 1;
         // Draw the gcode path in the scene view for debugging.
@@ -43,6 +53,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
             Debug.DrawLine(start, end, is_white ? Color.white : Color.black);
         }
     }
+
 
     [ContextMenu("GenerateGcode")]
     public void GenerateGcode() {
@@ -124,6 +135,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         Debug.Log($"BSurface Gcode written to {_file_path} -Calvin");
     }
 
+
     /// <summary>
     /// Adds points to the target uv position so that each point is equidistant in 3D space.
     /// Exclusive of the target position.
@@ -175,6 +187,8 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
             _uv_points.Add(current_position + uv_step);
         }
     }
+
+
     public Vector3 _debug_target_pos;
     public int _angular_resolution_per_rev = 100;
     Vector2 _prev_uv;
@@ -193,17 +207,24 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
     /// <param name="solution_requested">
     /// Each bit of byte describes a type of solution returned: 0=cw, 1=ccw, 2=closer, 3=farther.
     /// </param>
+
+    #region FindStepoverPoint (FSP)
     public Vector2 FindStepoverPoint(
         out byte solution_returned,
+        out int index_of_collided,
         Vector2 start_uv = new(),
         Vector3 target_world = new(),
         byte solution_requested = 0b1111,
         bool sticky_mode = false,
         bool limit_90deg_turns = true) {
-        // Handle case where _uv_points is empty.
+
+
+        #region FSP Setup
+        // Escape if no points.
         if (_uv_points.Count == 0) {
             Debug.LogWarning("FindStepoverPoint called with no uv points. Returning NaN.");
-            solution_returned = 0;
+            solution_returned = 0; // No solution.
+            index_of_collided = -1; // No collision.
             return new Vector2(float.NaN, float.NaN);
         }
 
@@ -216,17 +237,12 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         bool ccw_is_valid = (solution_requested & 0b0010) != 0;
         bool closer_is_valid = (solution_requested & 0b0100) != 0;
         bool farther_is_valid = (solution_requested & 0b1000) != 0;
-        // Escape with warning if no valid solutions are requested.
+
+        // Escape if no solutions are requested.
         if ((!cw_is_valid && !ccw_is_valid) || (!closer_is_valid && !farther_is_valid)) {
             Debug.LogWarning("FindStepoverPoint called with no valid solutions requested. Returning NaN.");
-            solution_returned = 0;
-            return new Vector2(float.NaN, float.NaN);
-        }
-
-        // If there are no uv points, return error.
-        if (_uv_points.Count == 0) {
-            Debug.LogWarning("FindStepoverPoint called with no uv points. Returning NaN.");
-            solution_returned = 0;
+            solution_returned = 0; // No solution.
+            index_of_collided = -1; // No collision.
             return new Vector2(float.NaN, float.NaN);
         }
 
@@ -242,7 +258,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         // Update _prev_uv and store difference in a bool.
         bool curr_uv_changed = _prev_uv != curr_uv;
         _prev_uv = curr_uv;
+        #endregion FSP Setup
 
+        #region FSP Before Loop
         // Find the uv direction that moves the closest to the target position.
         // We want to do this analytically, not numerically.
         // Scalar project the vector from the current position to the target position onto velocityU and velocityV vectors.
@@ -288,13 +306,18 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                 }
             }
         }
+        #endregion FSP Before Loop
 
+        #region FSP Loop
         // Perform linear search on the two 360s next to the initial guess.
+        int prev_index_of_collided_cw = -1; // Initialize to -1 to indicate no collision.
+        int prev_index_of_collided_ccw = -1; // Initialize to -1 to indicate no collision.
         Vector2 prev_ccw_valid_uv = new();
         Vector2 prev_cw_valid_uv = new();
         for (int i = 0; i <= _angular_resolution_per_rev; i++) {
             // Perform 1 CCW and 1 CW shift+test every outerloop, starting with CCW.
             for (int ccw_cw_enum = 0; ccw_cw_enum < 2; ccw_cw_enum++) {
+                #region FSP Calculate Next UV
                 // Define the theta shift in 3d space that we want.
                 float theta_shift_wanted = 2 * Mathf.PI * i / _angular_resolution_per_rev;
                 if (ccw_cw_enum == 1)
@@ -330,7 +353,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                 // Draw the tested line in the scene view for debugging.
                 if (i == 0)
                     Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 2f), Color.cyan);
+                #endregion FSP Calculate Next UV
 
+                #region FSP Check Validity
                 // Check if next_uv is valid.
                 bool is_valid = true;
 
@@ -341,7 +366,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                 }
 
                 // Check if it is too close to any other point in _uv_points[_testworthy_indices].
-                if (IsValidPos(next_pos) == false) {
+                if (PosCollidesWithStepover(next_pos, out int curr_index_of_collided)) {
                     is_valid = false;
                     Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.4f), Color.grey);
                 }
@@ -384,19 +409,28 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                     is_valid = false;
                     Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1f), Color.orange);
                 }
+                #endregion FSP Check Validity
 
+                #region FSP Return Logic
                 // In sticky mode, we only want to return the point if it is next to an invalid point.
                 // If the initial guess is invalid, we want to turn sticky mode off, because the next valid point is gurenteed to be a sticky one.
                 if (i == 0 && is_valid == false)
                     sticky_mode = false; // This bool will never be turned on after this.
-                                         // Handle sticky mode logic.
+
+                // Handle sticky mode logic.
+                // If sticky mode is false, we want to return the first valid point we find.
                 if (sticky_mode == false) {
                     if (is_valid == true) {
                         // Draw a debug line from the current point to the next point in the "shifted" direction.
                         Debug.DrawLine(curr_world, next_world, Color.magenta);
                         solution_returned = curr_solution_type;
+                        index_of_collided = (ccw_cw_enum == 0) ? prev_index_of_collided_ccw : prev_index_of_collided_cw;
                         return next_uv;
                     }
+                    if (ccw_cw_enum == 0)
+                        prev_index_of_collided_ccw = curr_index_of_collided;
+                    else
+                        prev_index_of_collided_cw = curr_index_of_collided;
                 }
                 else {
                     // We need to find the next invalid point, which is also in the direction we requested,
@@ -411,6 +445,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                         Debug.DrawLine(curr_world, output_world, Color.magenta);
 
                         solution_returned = curr_solution_type;
+                        index_of_collided = curr_index_of_collided;
                         return output_uv;
                     }
                     // Update the corresponding previous valid point.
@@ -419,18 +454,22 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                     else
                         prev_cw_valid_uv = next_uv;
                 }
+                #endregion FSP Handle Validity
             }
         }
+        #endregion FSP Loop
 
         // If nothing was returned, return NaN.
         solution_returned = 0;
+        index_of_collided = -1; // No collision.
         return new Vector2(float.NaN, float.NaN);
     }
+    #endregion FindStepoverPoint (FSP)
 
     /// <summary>
     /// Checks if the next position is valid by checking if it is at least _stepover distance away from every other point in _uv_points.
     /// </summary>
-    bool IsValidPos(in Vector3 next_pos) {
+    bool PosCollidesWithStepover(in Vector3 next_pos, out int index_of_collided) {
         for (int i_uv = 0; i_uv < _testworthy_indices.Count; i_uv++) {
             if (_testworthy_indices[i_uv] > _uv_points.Count - 1) {
                 _testworthy_indices.RemoveAt(i_uv);
@@ -442,10 +481,13 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
             // Calculate the distance between the next point and the other point.
             float distance = Vector3.Distance(next_pos, other_pos);
             // If the distance is less than the stepover distance, the point is not valid.
-            if (distance < _stepover)
-                return false;
+            if (distance < _stepover) {
+                index_of_collided = _testworthy_indices[i_uv];
+                return true;
+            }
         }
-        return true;
+        index_of_collided = -1; // No collision.
+        return false;
     }
 
     /// <summary>
