@@ -38,7 +38,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
             sticky_mode: false
         ); // Colon is named argument syntax for optional parameters.
         // Debug.Log($"FindStepoverPoint returned: {Convert.ToString(fsp_output, 2).PadLeft(4, '0')}");
-        Debug.Log($"Index of collided: {index_of_collided}");
+        // Debug.Log($"Index of collided: {index_of_collided}");
     }
 
 

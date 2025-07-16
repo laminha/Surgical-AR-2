@@ -7,6 +7,5 @@ public class ConformalToolpathingModeManager : MonoBehaviour
     public void ToggleToolpathingMode()
     {
         _toolpathing_ui.SetActive(!_toolpathing_ui.activeSelf);
-        _gcode_generator._uv_points.Clear();
     }
 }
