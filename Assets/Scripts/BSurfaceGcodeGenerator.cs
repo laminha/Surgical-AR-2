@@ -5,8 +5,7 @@ using System.IO;
 using UnityEditor;
 using Unity.Mathematics;
 
-public class BSurfaceGcodeGenerator : MonoBehaviour
-{
+public class BSurfaceGcodeGenerator : MonoBehaviour {
     public BsplineManager _control_point_obj;
     public List<Vector2> _uv_points = new();
     public float _gcode_step_size; // The maximum distance between two 3D points in the gcode (unity units).
@@ -16,13 +15,11 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     private string _file_name;
     private string _file_path;
     public OVRCameraRig _tracking_space;
-    void Start()
-    {
+    void Start() {
         _file_name = "BSurface.gcode";
         _file_path = Path.Combine(Application.persistentDataPath, _file_name);
     }
-    void OnDrawGizmos()
-    {
+    void OnDrawGizmos() {
         if (_uv_points.Count == 0)
             GenerateGcode();
         else
@@ -30,18 +27,16 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         FindStepoverPoint(
             out byte fsp_output,
             target_world: _debug_target_pos,
-            solution_requested: 0b0111,
-            sticky_mode: false
+            solution_requested: 0b1111,
+            sticky_mode: true
         ); // Colon is named argument syntax for optional parameters.
         // Debug.Log($"FindStepoverPoint returned: {Convert.ToString(fsp_output, 2).PadLeft(4, '0')}");
     }
-    void DrawUVPoints()
-    {
+    void DrawUVPoints() {
         float editor_time_mod1 = (float)EditorApplication.timeSinceStartup % 1;
         // Draw the gcode path in the scene view for debugging.
         // alternate color from white to black for each segment.
-        for (int i = 0; i < _uv_points.Count - 1; i++)
-        {
+        for (int i = 0; i < _uv_points.Count - 1; i++) {
             Vector3 start = transform.TransformPoint(_control_point_obj.CalcBsurface(_uv_points[i].x, _uv_points[i].y));
             Vector3 end = transform.TransformPoint(_control_point_obj.CalcBsurface(_uv_points[i + 1].x, _uv_points[i + 1].y));
             bool is_white = Mathf.Floor(editor_time_mod1 * 10) == i % 10 || i % 10 == 0;
@@ -50,13 +45,11 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     }
 
     [ContextMenu("GenerateGcode")]
-    public void GenerateGcode()
-    {
+    public void GenerateGcode() {
         Start();
 
         // Check if control points are defined.
-        if (_control_point_obj._control_points == null)
-        {
+        if (_control_point_obj._control_points == null) {
             Debug.LogError("Control points are not defined. Please define them first.");
             return;
         }
@@ -65,8 +58,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         // Add start point to uv points.
         _uv_points.Add(new Vector2(0, 0.5f));
         // Traverse circular perimeter of the BSurface.
-        for (int i = 0; i < 100; i++)
-        {
+        for (int i = 0; i < 100; i++) {
             float theta = 2 * Mathf.PI * i / 99f;
             // We want to add points going counter clockwise starting from the "major axis index" (conventionally uv=(0,0.5))
             AddPointsToTargetUvExclusive(
@@ -84,8 +76,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         // Generate Gcode.
         // Iterate through uv points and add gcode commands to a text file.
         string gcode = "";
-        for (int i = 0; i < _uv_points.Count; i++)
-        {
+        for (int i = 0; i < _uv_points.Count; i++) {
             // Get the next gcode position in meters.
             Vector2 target_uv = _uv_points[i];
             Vector3 target_pos = _control_point_obj.CalcBsurface(target_uv.x, target_uv.y);
@@ -137,20 +128,16 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// Adds points to the target uv position so that each point is equidistant in 3D space.
     /// Exclusive of the target position.
     /// </summary>
-    public void AddPointsToTargetUvExclusive(float u, float v)
-    {
-        if (float.IsNaN(u) || float.IsNaN(v))
-        {
+    public void AddPointsToTargetUvExclusive(float u, float v) {
+        if (float.IsNaN(u) || float.IsNaN(v)) {
             Debug.LogError("AddPointsToTargetUvExclusive called with NaN values. Exiting.");
             return;
         }
 
         int counter = 0;
-        while (true)
-        {
+        while (true) {
             // Exit loop if 1000 loops have been reached.
-            if (++counter > 1000)
-            {
+            if (++counter > 1000) {
                 Debug.LogError("Infinite loop detected in AddGcodesToTargetUv. Exiting.");
                 break;
             }
@@ -180,8 +167,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
             Vector2 uv_step = scaled_uv_direction * _gcode_step_size;
 
             // Check if the distance to the final position is smaller than the step size.
-            if (Vector2.Distance(current_position, final_position) < uv_step.magnitude)
-            {
+            if (Vector2.Distance(current_position, final_position) < uv_step.magnitude) {
                 // If so, exit the loop.
                 return;
             }
@@ -213,11 +199,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         Vector3 target_world = new(),
         byte solution_requested = 0b1111,
         bool sticky_mode = false,
-        bool limit_90deg_turns = true)
-    {
+        bool limit_90deg_turns = true) {
         // Handle case where _uv_points is empty.
-        if (_uv_points.Count == 0)
-        {
+        if (_uv_points.Count == 0) {
             Debug.LogWarning("FindStepoverPoint called with no uv points. Returning NaN.");
             solution_returned = 0;
             return new Vector2(float.NaN, float.NaN);
@@ -233,16 +217,14 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         bool closer_is_valid = (solution_requested & 0b0100) != 0;
         bool farther_is_valid = (solution_requested & 0b1000) != 0;
         // Escape with warning if no valid solutions are requested.
-        if ((!cw_is_valid && !ccw_is_valid) || (!closer_is_valid && !farther_is_valid))
-        {
+        if ((!cw_is_valid && !ccw_is_valid) || (!closer_is_valid && !farther_is_valid)) {
             Debug.LogWarning("FindStepoverPoint called with no valid solutions requested. Returning NaN.");
             solution_returned = 0;
             return new Vector2(float.NaN, float.NaN);
         }
 
         // If there are no uv points, return error.
-        if (_uv_points.Count == 0)
-        {
+        if (_uv_points.Count == 0) {
             Debug.LogWarning("FindStepoverPoint called with no uv points. Returning NaN.");
             solution_returned = 0;
             return new Vector2(float.NaN, float.NaN);
@@ -283,18 +265,15 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
 
         // If _uv_points is emptyish, reset the testworthy indices.
         // the number 10 is a catch-all, can be reduced probably.
-        if (_uv_points.Count < 10)
-        {
+        if (_uv_points.Count < 10) {
             _testworthy_indices = new();
         }
         // If the current uv point changed, or _testworthy_indices is null, we need to recalculate the testworthy indices.
-        if (curr_uv_changed || _testworthy_indices == null)
-        {
+        if (curr_uv_changed || _testworthy_indices == null) {
             // Initialize the list of testworthy indices.
             _testworthy_indices = new List<int>();
             // Iterate through the uv points.
-            for (int i = 0; i < _uv_points.Count; i++)
-            {
+            for (int i = 0; i < _uv_points.Count; i++) {
                 // We already have the current uv's 3D point.
                 // Calculate the 3D position of the other uv point.
                 Vector2 other_uv = _uv_points[i];
@@ -304,8 +283,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 // If the distance is {stepover <= dist <= calcstep+stepover}, add the index to the list.
                 // >=calc+stepover is too far to be considered, and <=stepover are points that are in our immediate trail.
                 // This limits us to instantaneous angle changes of <90deg.
-                if (distance >= _stepover && distance <= _calculation_step_size + _stepover)
-                {
+                if (distance >= _stepover && distance <= _calculation_step_size + _stepover) {
                     _testworthy_indices.Add(i);
                 }
             }
@@ -314,11 +292,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         // Perform linear search on the two 360s next to the initial guess.
         Vector2 prev_ccw_valid_uv = new();
         Vector2 prev_cw_valid_uv = new();
-        for (int i = 0; i <= _angular_resolution_per_rev; i++)
-        {
+        for (int i = 0; i <= _angular_resolution_per_rev; i++) {
             // Perform 1 CCW and 1 CW shift+test every outerloop, starting with CCW.
-            for (int ccw_cw_enum = 0; ccw_cw_enum < 2; ccw_cw_enum++)
-            {
+            for (int ccw_cw_enum = 0; ccw_cw_enum < 2; ccw_cw_enum++) {
                 // Define the theta shift in 3d space that we want.
                 float theta_shift_wanted = 2 * Mathf.PI * i / _angular_resolution_per_rev;
                 if (ccw_cw_enum == 1)
@@ -354,135 +330,75 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
                 if (i == 0)
                     Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 3), Color.cyan);
                 Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 2), Color.grey);
+
                 // Check if next_uv is inside the circle inscribing the BSurface.
+                bool is_valid = Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f;
+
                 // Check if it is too close to any other point in _uv_points[_testworthy_indices].
-                bool is_valid = (Vector2.Distance(new(0.5f, 0.5f), next_uv) <= 0.5f) && IsValidPos(next_pos);
+                is_valid = is_valid && IsValidPos(next_pos);
+
+                // Check if the turn is more than 90deg.
+                if (_uv_points.Count >= 2 && limit_90deg_turns) {
+                    Vector3 angle1 = -curr_pos + next_pos;
+                    Vector3 prev_pos = _control_point_obj.CalcBsurface(_uv_points[^2].x, _uv_points[^2].y); // ^2 is the point before curr.
+                    Vector3 angle2 = -prev_pos + curr_pos; // ^2 is point before curr.
+                    float dot = Vector3.Dot(angle1, angle2);
+                    // If the dot product is negative, segments are >90deg trajectory change.
+                    if (dot < 0) {
+                        is_valid = false;
+                    }
+                }
+
+                // Check if the current solution matches the requested solution types.
+                byte curr_solution_type = 0;
+                // Set winding direction bits.
+                if (i == 0) // First loop means the solution is directionless.
+                    curr_solution_type = 0b0000;
+                else if (ccw_cw_enum == 0)
+                    if (sticky_mode == false) // True if we are currently in invalid space.
+                        curr_solution_type |= 0b0001; // ccw_enum==0 represents CW solution in this case.
+                    else // Runs if we are in valid space.
+                        curr_solution_type |= 0b0010; // ccw_enum==0 represents a CCW solution in this case.
+                else if (ccw_cw_enum == 1)
+                    if (sticky_mode == false) // Ditto.
+                        curr_solution_type |= 0b0010; // Vise versa.
+                    else
+                        curr_solution_type |= 0b0001; // Vise versa.
+                // Set based on closer-ness.
+                if (Vector3.Distance(next_world, target_world) < Vector3.Distance(curr_world, target_world))
+                    curr_solution_type |= 0b0100; // Closer.
+                else
+                    curr_solution_type |= 0b1000; // Farther.
+                // If every set flag in curr_solution_type is not also set in solution_requested, the point is invalid.
+                if ((curr_solution_type & solution_requested) != curr_solution_type) {
+                    is_valid = false;
+                }
+
 
                 // In sticky mode, we only want to return the point if it is next to an invalid point.
                 // If the initial guess is invalid, we want to turn sticky mode off, because the next valid point is gurenteed to be a sticky one.
                 if (i == 0 && is_valid == false)
                     sticky_mode = false; // This bool will never be turned on after this.
                 // Handle sticky mode logic.
-                if (sticky_mode == false)
-                {
-                    if (is_valid == true)
-                    {
-                        // Print wanted and actual theta shift for debugging.
-                        // Debug.Log($"Wanted theta shift: {theta_shift_wanted}, Actual theta shift: {theta_shift_uv}");
-
-                        // If solution is more than 90deg turn from last point (&& option enabled), we want to skip it.
-                        if (_uv_points.Count >= 2 && limit_90deg_turns)
-                        {
-                            Vector3 angle1 = -curr_pos + next_pos;
-                            Vector3 prev_pos = _control_point_obj.CalcBsurface(_uv_points[^2].x, _uv_points[^2].y); // ^2 is the point before curr.
-                            Vector3 angle2 = -prev_pos + curr_pos; // ^2 is point before curr.
-                            float dot = Vector3.Dot(angle1, angle2);
-                            // If the dot product is negative, segments are >90deg trajectory change.
-                            if (dot < 0)
-                            {
-                                // Draw line.
-                                Debug.DrawLine(curr_world, next_world, Color.purple);
-                                if (i == 0)
-                                {
-                                    // Draw a line from prev, to curr, to next, to visualize the trajectory change.
-                                    Vector3 prev_world = _control_point_obj.transform.TransformPoint(prev_pos);
-                                    Debug.DrawLine(prev_world, curr_world, Color.blue);
-                                    Debug.DrawLine(curr_world, next_world, Color.red);
-                                    Debug.DrawLine(prev_world, next_world, Color.green);
-                                }
-                                continue;
-                            }
-                        }
-
+                if (sticky_mode == false) {
+                    if (is_valid == true) {
                         // Draw a debug line from the current point to the next point in the "shifted" direction.
                         Debug.DrawLine(curr_world, next_world, Color.magenta);
-
-                        // Find current solution type.
-                        // Reminder, bit 0 is cw, bit 1 is ccw, bit 2 is closer, bit 3 is farther.
-                        byte curr_solution_type = 0;
-                        // Set based on cw,cww-ness.
-                        if (i == 0)
-                            // If this is the first loop, the solution is neither cw nor ccw (ie. will be accepted regardless).
-                            curr_solution_type |= 0b0000;
-                        else
-                            if (ccw_cw_enum == 0)
-                            curr_solution_type |= 0b0001; // ccw_enum represents cw solution in this case (stickymode == false).
-                        else
-                            curr_solution_type |= 0b0010; // Vise versa.
-                        // Set based on closer-ness.
-                        if (Vector3.Distance(next_world, target_world) < Vector3.Distance(curr_world, target_world)) // ie. closer.
-                            curr_solution_type |= 0b0100; // Closer.
-                        else
-                            curr_solution_type |= 0b1000; // Farther.
-
-                        // If every 1 in curr_solution_type is also in solution_requested, return the point.
-                        if ((curr_solution_type & solution_requested) == curr_solution_type)
-                        {
-                            solution_returned = curr_solution_type;
-                            return next_uv;
-                        }
-                        // If no solutions are valid & requested, continue searching.
+                        solution_returned = curr_solution_type;
+                        return next_uv;
                     }
                 }
-                else
-                {
+                else {
                     // We need to find the next invalid point, then return the previous valid point in that direction.
-                    if (is_valid == false)
-                    {
+                    if (is_valid == false) {
                         // Impossible for prevs to be uninitialized as i > 0 is guaranteed.
                         Vector2 output_uv = (ccw_cw_enum == 0) ? prev_ccw_valid_uv : prev_cw_valid_uv;
                         Vector3 output_pos = _control_point_obj.CalcBsurface(output_uv.x, output_uv.y);
                         Vector3 output_world = _control_point_obj.transform.TransformPoint(output_pos);
                         Debug.DrawLine(curr_world, output_world, Color.magenta);
 
-                        // If solution is more than 90deg turn from last point (&& option enabled), we want to skip it.
-                        if (_uv_points.Count >= 2 && limit_90deg_turns)
-                        {
-                            Vector3 angle1 = -curr_pos + output_pos;
-                            Vector3 prev_pos = _control_point_obj.CalcBsurface(_uv_points[^2].x, _uv_points[^2].y); // ^2 is the point before curr.
-                            Vector3 angle2 = -prev_pos + curr_pos; // ^2 is index, count - 2.
-                            float dot = Vector3.Dot(angle1, angle2);
-                            // If the dot product is negative, segments are >90deg trajectory change.
-                            if (dot < 0)
-                            {
-                                // Draw line.
-                                Debug.DrawLine(curr_world, next_world, Color.purple);
-                                if (i == 0)
-                                {
-                                    // Draw a line from prev, to curr, to next, to visualize the trajectory change.
-                                    Vector3 prev_world = _control_point_obj.transform.TransformPoint(prev_pos);
-                                    Debug.DrawLine(prev_world, curr_world, Color.blue);
-                                    Debug.DrawLine(curr_world, next_world, Color.red);
-                                    Debug.DrawLine(prev_world, next_world, Color.green);
-                                }
-                                continue;
-                            }
-                        }
-
-                        // Find current solution type.
-                        // Reminder, bit 0 is cw, bit 1 is ccw, bit 2 is closer, bit 3 is farther.
-                        byte curr_solution_type = 0;
-                        // Set based on cw,cww-ness.
-                        if (i == 0)
-                            // If this is the first loop, the solution is neither cw nor ccw (ie. will be accepted regardless).
-                            curr_solution_type |= 0b0000;
-                        else
-                            if (ccw_cw_enum == 0)
-                            curr_solution_type |= 0b0010; // ccw_enum represents ccw solution in this case (stickymode == true).
-                        else
-                            curr_solution_type |= 0b0001; // Vise versa.
-                        // Set based on closer-ness.
-                        if (Vector3.Distance(output_world, target_world) < Vector3.Distance(curr_world, target_world)) // ie. closer.
-                            curr_solution_type |= 0b0100; // Closer.
-                        else
-                            curr_solution_type |= 0b1000; // Farther.
-
-                        // If every 1 in curr_solution_type is also in solution_requested, return the point.
-                        if ((curr_solution_type & solution_requested) == curr_solution_type)
-                        {
-                            solution_returned = curr_solution_type;
-                            return output_uv;
-                        }
+                        solution_returned = curr_solution_type;
+                        return output_uv;
                     }
                     // Update the corresponding previous valid point.
                     if (ccw_cw_enum == 0)
@@ -497,16 +413,13 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
         solution_returned = 0;
         return new Vector2(float.NaN, float.NaN);
     }
-    
+
     /// <summary>
     /// Checks if the next position is valid by checking if it is at least _stepover distance away from every other point in _uv_points.
     /// </summary>
-    bool IsValidPos(in Vector3 next_pos)
-    {
-        for (int i_uv = 0; i_uv < _testworthy_indices.Count; i_uv++)
-        {
-            if (_testworthy_indices[i_uv] > _uv_points.Count - 1)
-            {
+    bool IsValidPos(in Vector3 next_pos) {
+        for (int i_uv = 0; i_uv < _testworthy_indices.Count; i_uv++) {
+            if (_testworthy_indices[i_uv] > _uv_points.Count - 1) {
                 _testworthy_indices.RemoveAt(i_uv);
                 continue;
             }
@@ -525,8 +438,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour
     /// <summary>
     /// Converts an angle in 3D space, relative to velo_u on the surface tangent plane, to an angle in uv space.
     /// </summary>
-    float SurfaceAngleToUVAngle(float surface_angle, Vector3 velo_u, Vector3 velo_v)
-    {
+    float SurfaceAngleToUVAngle(float surface_angle, Vector3 velo_u, Vector3 velo_v) {
         // Turn the 3D velocity vectors into their 2D tangent plane counterparts (x axis alligned with velo_u).
         Vector2 velo_u_tangent = new(velo_u.magnitude, 0);
         float angle_between_velo_uv = Vector3.SignedAngle(velo_u, velo_v, Vector3.Cross(velo_u, velo_v));
