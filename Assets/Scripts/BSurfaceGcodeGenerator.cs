@@ -302,8 +302,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                 float distance = Vector3.Distance(curr_pos, other_pos);
                 // If the distance is {stepover <= dist <= calcstep+stepover}, add the index to the list.
                 // >=calc+stepover is too far to be considered, and <=stepover are points that are in our immediate trail.
-                // This limits us to instantaneous angle changes of <90deg.
-                if (distance >= _stepover && distance <= _calculation_step_size + _stepover) {
+                if (distance >= _stepover * 0.99 && distance <= _calculation_step_size + _stepover) { // The *0.99 is to make sure we dont accidentally exclude distinct toolpaths.
                     _testworthy_indices.Add(i);
                 }
             }
