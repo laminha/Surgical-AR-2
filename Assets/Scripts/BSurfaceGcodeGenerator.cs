@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using Unity.Mathematics;
+using System;
 
 public class BSurfaceGcodeGenerator : MonoBehaviour {
     public BsplineManager _control_point_obj;
@@ -24,7 +25,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
     }
 
 
-
+    #region OnDrawGizmos
     void OnDrawGizmos() {
         if (_uv_points.Count == 0)
             GenerateGcode();
@@ -35,12 +36,14 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
             out int index_of_collided,
             target_world: _debug_target_pos,
             solution_requested: 0b1111,
-            sticky_mode: false
+            sticky_mode: true,
+            max_turning_radians: Mathf.Deg2Rad * 170,
+            blacklist_recent_points: true
         ); // Colon is named argument syntax for optional parameters.
         // Debug.Log($"FindStepoverPoint returned: {Convert.ToString(fsp_output, 2).PadLeft(4, '0')}");
         // Debug.Log($"Index of collided: {index_of_collided}");
     }
-
+    #endregion OnDrawGizmos
 
     void DrawUVPoints() {
         float editor_time_mod1 = (float)EditorApplication.timeSinceStartup % 1;
@@ -210,6 +213,15 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
     /// <param name="index_of_collided">
     /// The index of the UV point that was collided with, -1 means no collision/90deg turn, -2 means collision with outer boundary.
     /// </param>
+    /// <param name="sticky_mode">
+    /// If true, the function will only return solutions that are next to an invalid solution.
+    /// </param>
+    /// <param name="max_turning_radians">
+    /// The maximum angle in radians that the toolpath can turn at a point.
+    /// </param>
+    /// <param name="blacklisted_indices">
+    /// A set of indices that should not be considered during stepover distance validaty checking.
+    /// </param>
 
     #region FindStepoverPoint (FSP)
     public Vector2 FindStepoverPoint(
@@ -219,7 +231,10 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         Vector3 target_world = new(),
         byte solution_requested = 0b1111,
         bool sticky_mode = false,
-        float max_turning_radians = Mathf.PI * 0.5f) {
+        float max_turning_radians = Mathf.PI * 0.5f,
+        /*in*/ HashSet<int> blacklisted_indices = null,
+        bool blacklist_recent_points = false
+    ) {
 
         #region FSP Setup
         // Escape if no points.
@@ -233,6 +248,10 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         // Handle default start_uv.
         if (start_uv == new Vector2())
             start_uv = _uv_points.Count > 0 ? _uv_points[^1] : new Vector2(0, 0.5f);
+
+        // Handle default blacklisted_indices.
+        if (blacklisted_indices == null)
+            blacklisted_indices = new HashSet<int>();
 
         // Process solution_requested.
         bool cw_is_valid = (solution_requested & 0b0001) != 0;
@@ -292,19 +311,35 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         if (curr_uv_changed || _testworthy_indices == null) {
             // Initialize the list of testworthy indices.
             _testworthy_indices = new List<int>();
-            // Iterate through the uv points.
-            for (int i = 0; i < _uv_points.Count; i++) {
+            // Iterate through the uv points backwards.
+            bool point_found_out_of_range = false; // Turns on when we find the first point that is out of range.
+            for (int i = _uv_points.Count - 1; i >= 0; i--) {
                 // We already have the current uv's 3D point.
                 // Calculate the 3D position of the other uv point.
                 Vector2 other_uv = _uv_points[i];
                 Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
                 // Calculate the distance between the curr point and the other point.
                 float distance = Vector3.Distance(curr_pos, other_pos);
+
                 // If the distance is {stepover <= dist <= calcstep+stepover}, add the index to the list.
                 // >=calc+stepover is too far to be considered, and <=stepover are points that are in our immediate trail.
                 if (distance >= _stepover * 0.99 && distance <= _calculation_step_size + _stepover) { // The *0.99 is to make sure we dont accidentally exclude distinct toolpaths.
-                    _testworthy_indices.Add(i);
+                    // Also, if we haven't found a point out of range yet, dont add the point.
+                    // But if we have that setting turned off, add the point regardless.
+                    if (point_found_out_of_range || !blacklist_recent_points)
+                        _testworthy_indices.Add(i);
                 }
+                if (distance > _calculation_step_size + _stepover)
+                    point_found_out_of_range = true;
+                // Backtracking from current index, blacklist all points until out of range (stepover+calcstep).    
+            }
+        }
+        // Set testworthy indices for this function call.
+        List<int> curr_testworthy_indices = new();
+        for (int i = 0; i < _testworthy_indices.Count; i++) {
+            // If the index is not blacklisted, add it to the list.
+            if (blacklisted_indices.Contains(_testworthy_indices[i]) == false) {
+                curr_testworthy_indices.Add(_testworthy_indices[i]);
             }
         }
 
@@ -318,9 +353,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
             float sin = Mathf.Sin(theta);
             float cos_next = Mathf.Cos(theta + 2 * Mathf.PI / 99f);
             float sin_next = Mathf.Sin(theta + 2 * Mathf.PI / 99f);
-            Vector3 circle1_point1 = curr_pos + (unit_velo_u * cos + unit_velo_v * sin) * _stepover;
+            Vector3 circle1_point1 = curr_pos + (unit_velo_u * cos + unit_velo_v * sin) * _stepover * 0.99f;
+            Vector3 circle1_point2 = curr_pos + (unit_velo_u * cos_next + unit_velo_v * sin_next) * _stepover * 0.99f;
             Vector3 circle2_point1 = curr_pos + (unit_velo_u * cos + unit_velo_v * sin) * (_calculation_step_size + _stepover);
-            Vector3 circle1_point2 = curr_pos + (unit_velo_u * cos_next + unit_velo_v * sin_next) * _stepover;
             Vector3 circle2_point2 = curr_pos + (unit_velo_u * cos_next + unit_velo_v * sin_next) * (_calculation_step_size + _stepover);
             Vector3 c1p1_world = _control_point_obj.transform.TransformPoint(circle1_point1);
             Vector3 c1p2_world = _control_point_obj.transform.TransformPoint(circle1_point2);
@@ -377,7 +412,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
 
                 // Draw the tested line in the scene view for debugging.
                 if (i == 0)
-                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 2f), Color.cyan);
+                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1f), Color.cyan);
                 #endregion FSP Calculate Next UV
 
                 #region FSP Check Validity
@@ -388,14 +423,14 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                 // Check if it is too close to any other point in _uv_points[_testworthy_indices].
                 if (PosCollidesWithStepover(next_pos, out int curr_index_of_collided)) {
                     is_valid = false;
-                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.6f), Color.grey);
+                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 0.9f), Color.grey);
                 }
 
                 // Check if next_uv is inside the circle inscribing the BSurface.
                 if (Vector2.Distance(new(0.5f, 0.5f), next_uv) > 0.5f) {
                     is_valid = false;
                     curr_index_of_collided = -2; // Set the collision index to -2: collision with outer boundary.
-                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.4f), Color.red);
+                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 0.8f), Color.red);
                 }
 
                 // Check if the turn is more than max_turning_radians.
@@ -406,7 +441,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                     float angle = Mathf.Deg2Rad * Vector3.Angle(angle_vec1, angle_vec2);
                     if (angle > max_turning_radians) {
                         is_valid = false;
-                        Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.2f), Color.purple);
+                        Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 0.6f), Color.purple);
                     }
                 }
 
@@ -433,7 +468,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                                                   // If every set flag in curr_solution_type is not also set in solution_requested, the point is invalid.
                 if ((curr_solution_type & solution_requested) != curr_solution_type) {
                     is_valid = false;
-                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1f), Color.orange);
+                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 0.4f), Color.orange);
                 }
                 #endregion FSP Check Validity
 
@@ -448,7 +483,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                 if (sticky_mode == false) {
                     if (is_valid == true) {
                         // Draw a debug line from the current point to the next point in the "shifted" direction.
-                        Debug.DrawLine(curr_world, next_world, Color.magenta);
+                        Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 0.3f), Color.magenta);
                         solution_returned = curr_solution_type;
                         index_of_collided = (ccw_cw_enum == 0) ? prev_index_of_collided_ccw : prev_index_of_collided_cw;
                         return next_uv;
@@ -468,7 +503,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                         Vector2 output_uv = (ccw_cw_enum == 0) ? prev_ccw_valid_uv : prev_cw_valid_uv;
                         Vector3 output_pos = _control_point_obj.CalcBsurface(output_uv.x, output_uv.y);
                         Vector3 output_world = _control_point_obj.transform.TransformPoint(output_pos);
-                        Debug.DrawLine(curr_world, output_world, Color.magenta);
+                        Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, output_world, 0.3f), Color.magenta);
 
                         solution_returned = curr_solution_type;
                         index_of_collided = curr_index_of_collided;
