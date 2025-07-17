@@ -307,6 +307,30 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                 }
             }
         }
+
+        // Draw Whitelist region.
+        // Draw two circles around curr_uv, one with radius _stepover and one with radius _calculation_step_size + _stepover.
+        Vector3 unit_velo_u = velo_u.normalized;
+        Vector3 unit_velo_v = velo_v.normalized;
+        for (int i = 0; i < 100; i++) {
+            float theta = 2 * Mathf.PI * i / 99f;
+            float cos = Mathf.Cos(theta);
+            float sin = Mathf.Sin(theta);
+            float cos_next = Mathf.Cos(theta + 2 * Mathf.PI / 99f);
+            float sin_next = Mathf.Sin(theta + 2 * Mathf.PI / 99f);
+            Vector3 circle1_point1 = curr_pos + (unit_velo_u * cos + unit_velo_v * sin) * _stepover;
+            Vector3 circle2_point1 = curr_pos + (unit_velo_u * cos + unit_velo_v * sin) * (_calculation_step_size + _stepover);
+            Vector3 circle1_point2 = curr_pos + (unit_velo_u * cos_next + unit_velo_v * sin_next) * _stepover;
+            Vector3 circle2_point2 = curr_pos + (unit_velo_u * cos_next + unit_velo_v * sin_next) * (_calculation_step_size + _stepover);
+            Vector3 c1p1_world = _control_point_obj.transform.TransformPoint(circle1_point1);
+            Vector3 c1p2_world = _control_point_obj.transform.TransformPoint(circle1_point2);
+            Vector3 c2p1_world = _control_point_obj.transform.TransformPoint(circle2_point1);
+            Vector3 c2p2_world = _control_point_obj.transform.TransformPoint(circle2_point2);
+            Debug.DrawLine(c1p1_world, c1p2_world, Color.white);
+            Debug.DrawLine(c2p1_world, c2p2_world, Color.white);
+            if (i % 10 == 0)
+                Debug.DrawLine(c1p1_world, c2p1_world, new Color(0.5f, 0.5f, 0.5f));
+        }
         #endregion FSP Before Loop
 
         #region FSP Loop
