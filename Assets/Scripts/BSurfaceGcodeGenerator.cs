@@ -207,6 +207,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
     /// <param name="solution_requested">
     /// Each bit of byte describes a type of solution returned: 0=cw, 1=ccw, 2=closer, 3=farther.
     /// </param>
+    /// <param name="index_of_collided">
+    /// The index of the UV point that was collided with, -1 means no collision/90deg turn, -2 means collision with outer boundary.
+    /// </param>
 
     #region FindStepoverPoint (FSP)
     public Vector2 FindStepoverPoint(
@@ -359,16 +362,18 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                 // Check if next_uv is valid.
                 bool is_valid = true;
 
-                // Check if next_uv is inside the circle inscribing the BSurface.
-                if (Vector2.Distance(new(0.5f, 0.5f), next_uv) > 0.5f) {
-                    is_valid = false;
-                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.6f), Color.red);
-                }
 
                 // Check if it is too close to any other point in _uv_points[_testworthy_indices].
                 if (PosCollidesWithStepover(next_pos, out int curr_index_of_collided)) {
                     is_valid = false;
-                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.4f), Color.grey);
+                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.6f), Color.grey);
+                }
+
+                // Check if next_uv is inside the circle inscribing the BSurface.
+                if (Vector2.Distance(new(0.5f, 0.5f), next_uv) > 0.5f) {
+                    is_valid = false;
+                    curr_index_of_collided = -2; // Set the collision index to -2: collision with outer boundary.
+                    Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.4f), Color.red);
                 }
 
                 // Check if the turn is more than 90deg.
