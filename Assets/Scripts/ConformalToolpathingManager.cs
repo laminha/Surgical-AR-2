@@ -18,11 +18,13 @@ public class ConformalToolpathingManager : MonoBehaviour {
     }
     void OnDrawGizmos() {
         Awake();
-        UpdateToolpathRenderer();
+        if (_control_point_obj._control_points != null) {
+            UpdateToolpathRenderer();
 
-        Vector3 _debug_rectilinear_target = _control_point_obj.CalcBsurface(_debug_rectilinear_target_uv.x, _debug_rectilinear_target_uv.y);
-        Vector3 _debug_rectilinear_target_world = _control_point_obj.transform.TransformPoint(_debug_rectilinear_target);
-        Debug.DrawLine(_debug_rectilinear_target_world, _debug_rectilinear_target_world + Vector3.up * 0.1f, Color.red);
+            Vector3 _debug_rectilinear_target = _control_point_obj.CalcBsurface(_debug_rectilinear_target_uv.x, _debug_rectilinear_target_uv.y);
+            Vector3 _debug_rectilinear_target_world = _control_point_obj.transform.TransformPoint(_debug_rectilinear_target);
+            Debug.DrawLine(_debug_rectilinear_target_world, _debug_rectilinear_target_world + Vector3.up * 0.1f, Color.red);
+        }
     }
     void UpdateToolpathRenderer() {
         // Update the toolpath line renderer.
