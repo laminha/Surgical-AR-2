@@ -219,8 +219,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         Vector3 target_world = new(),
         byte solution_requested = 0b1111,
         bool sticky_mode = false,
-        bool limit_90deg_turns = true) {
-
+        float max_turning_radians = Mathf.PI * 0.5f) {
 
         #region FSP Setup
         // Escape if no points.
@@ -376,14 +375,13 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                     Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.4f), Color.red);
                 }
 
-                // Check if the turn is more than 90deg.
-                if (_uv_points.Count >= 2 && limit_90deg_turns) {
-                    Vector3 angle1 = -curr_pos + next_pos;
+                // Check if the turn is more than max_turning_radians.
+                if (_uv_points.Count >= 2) {
+                    Vector3 angle_vec1 = (-curr_pos + next_pos).normalized;
                     Vector3 prev_pos = _control_point_obj.CalcBsurface(_uv_points[^2].x, _uv_points[^2].y); // ^2 is the point before curr.
-                    Vector3 angle2 = -prev_pos + curr_pos; // ^2 is point before curr.
-                    float dot = Vector3.Dot(angle1, angle2);
-                    // If the dot product is negative, segments are >90deg trajectory change.
-                    if (dot < 0) {
+                    Vector3 angle_vec2 = (-prev_pos + curr_pos).normalized;
+                    float angle = Mathf.Deg2Rad * Vector3.Angle(angle_vec1, angle_vec2);
+                    if (angle > max_turning_radians) {
                         is_valid = false;
                         Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 1.2f), Color.purple);
                     }
