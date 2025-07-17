@@ -117,9 +117,8 @@ public class ConformalToolpathingManager : MonoBehaviour {
         }
         else if (operation_type == "rectilinear") { }
     }
-    [ContextMenu("DrawConcentricRing")]
-    int DrawConcentricRing(Vector2 start_uv, bool dir_cw, int num_rings) {
 
+    int DrawConcentricRing(Vector2 start_uv, bool dir_cw, int num_rings) {
         // Place the target at uv center's 3D point (doesn't really matter where the target is).
         Vector3 center_world = _control_point_obj.transform.TransformPoint(_control_point_obj.CalcBsurface(0.5f, 0.5f));
 
@@ -146,6 +145,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
                     return 1; // Error code: Maxed out on inner loops.
                 }
 
+                // Dear future intern, I am trapped in the blue computer. Please send help.
                 // Find the next point.
                 Vector2 next_uv = _gcode_generator.FindStepoverPoint(out _, out int collided_index, target_world: center_world, sticky_mode: true, solution_requested: solution_type);
 
@@ -170,100 +170,84 @@ public class ConformalToolpathingManager : MonoBehaviour {
     }
 
     public Vector2 _debug_rectilinear_target_uv = new(0.5f, 0f);
-    [ContextMenu("DrawProceduralRectilinear")]
-    int DrawProceduralRectilinear() {
+    [ContextMenu("DrawRectilinear")]
+    int DrawRectilinear() {
         // Temp parameter hard-coding.
-        Vector2 other_corner_uv = _debug_rectilinear_target_uv;
-        int num_lines = 4;
-
+        HashSet<int> reference_segment_indices = new(); // Indices of the segment of which the rectilinear pattern will be built off of.
+        bool dir_cw = false; // Solution winding for initial line path.
+        int num_lines = 40;
+        for (int i = 0; i < _gcode_generator._uv_points.Count; i++) // Set hashset to all existing uv points.
+            reference_segment_indices.Add(i);
         Debug.Log($"DrawRectilinear: num_lines={num_lines}");
 
         // Definitions.
-        Vector2 start_corner_uv = _gcode_generator._uv_points[^1];
-        Vector3 other_corner = _control_point_obj.CalcBsurface(other_corner_uv.x, other_corner_uv.y);
-        Vector3 other_corner_world = _control_point_obj.transform.TransformPoint(other_corner);
+        Vector3 target_world = _control_point_obj.transform.TransformPoint(_control_point_obj.CalcBsurface(0.5f, 0.5f)); // Doesn't really matter where the target is.
+        byte initial_solution_flags = dir_cw ? (byte)0b1101 : (byte)0b1110; // CW and CCW solution types, respectively.
 
-        Debug.Log($"Start corner UV: {start_corner_uv}, Other corner UV: {other_corner_uv}");
+        // Main loop.
+        HashSet<int> prev_line_indices = new(reference_segment_indices); // Stores the indices of the previous line's uv points.
 
-        // Find the starting solution winding (sticky) we need to get from uv[^1] (ie. start) to corner.
-        // Is the closest sticky solution (any) from start to corner a cw solution or a ccw solution?
-        _gcode_generator.FindStepoverPoint(out byte solution_type, out _, target_world: other_corner_world, sticky_mode: true);
-        byte solution_flags = (byte)(solution_type | 0b1100); // We want the same winding, but any closeness.
-
-        // Hardcode a solution winding of cw.
-        solution_flags = (byte)0b1101;
-
-        Debug.Log($"Initial solution_type: {solution_type}, solution_flags % 4: {solution_flags % 0b0100}");
-
-        // Per-line loop.
-        Vector2 primary_target_uv = start_corner_uv;
-        Vector2 secondary_target_uv = other_corner_uv;
         for (int counter_outer = 0; counter_outer < num_lines; counter_outer++) {
-            Debug.Log($"Starting line {counter_outer + 1}/{num_lines}");
-
             // Definitions.
-            // curr_solution_flags and target_corner_uv alternate.
-            byte curr_solution_flags = (counter_outer % 2 == 0) ? (solution_flags) : (byte)(solution_flags ^ 0b0011);
-            Vector2 curr_target_uv = counter_outer % 2 == 0 ? secondary_target_uv : primary_target_uv;
-            Vector3 curr_target = _control_point_obj.CalcBsurface(curr_target_uv.x, curr_target_uv.y);
-            Vector3 curr_target_world = _control_point_obj.transform.TransformPoint(curr_target);
+            byte curr_solution_flags = (counter_outer % 2 == 0) ? // Flip the winding direction every other line.
+                                       initial_solution_flags : (byte)(initial_solution_flags ^ 0b0011);
+            Debug.Log($"Starting line {counter_outer + 1} of {num_lines}");
 
-            Debug.Log($"Target corner UV: {curr_target_uv}");
-
-            // Inner loop: draw a sticky line from one point to another.
+            // Per-line inner loop.
+            HashSet<int> curr_line_indices = new(); // Stores the indices of the current line's uv points.
+            curr_line_indices.Add(_gcode_generator._uv_points.Count - 1); // The index joining two sets is shared.
             int counter_inner = 0;
-            bool close_solution_found = false;
+            int breaking_counter = -1;
             while (true) {
                 if (counter_inner++ > 500) {
                     Debug.LogError("Safety counter exceeded in DrawRectillinear inner loop.");
-                    return 1; // Error code: Maxed out on inner loops.
+                    return -1;
                 }
 
-                // Target target_corner, with the derived sticky solution winding + near.
-                Vector2 next_uv = _gcode_generator.FindStepoverPoint(out byte solution_inner_loop, out _, target_world: curr_target_world, sticky_mode: true, solution_requested: curr_solution_flags);
-                bool is_close = (solution_inner_loop & 0b0100) > 0;
-                bool is_far = (solution_inner_loop & 0b1000) > 0;
+                // Find the next UV point.
+                Vector2 next_uv = _gcode_generator.FindStepoverPoint(out byte solution_returned, out int index_collided, target_world: target_world, sticky_mode: true, solution_requested: curr_solution_flags, max_turning_radians: Mathf.PI * 0.5f);
+                Debug.Log($"Line {counter_outer + 1,3}, Inner loop {counter_inner,3}, next_uv = ({next_uv.x,7:F4}, {next_uv.y,7:F4}), index_collided = {index_collided,3}, solution_returned = {solution_returned}");
 
-                Debug.Log($"Inner loop {counter_inner}: next_uv={next_uv}, close={is_close}, far={is_far}");
+                // Stuck handling.
+                if (solution_returned == 0b0000) {
+                    Debug.Log("Next UV is NaN, performing sharp turn.");
 
-                // Hardcode out the first 5 FSP() calls, as they are often unstable (either far/close)
-                if (counter_inner > 5) {
-                    // Update close_solution_found.
-                    if (is_close)
-                        close_solution_found = true;
-                    // Escape if a far solution is returned (we are close enough to other_corner, or at a local minimum).
-                    // We also only escape if this is the the first far solution after a close solution.
-                    // This is to get over initial humps in the path, but doesnt handle intermediate humps.
-                    if (is_far && close_solution_found) {
-                        Debug.Log("Far solution returned, breaking inner loop.");
+                    // Get a new point with unlimited angle change and while ignoring our current rectilinear line.
+                    Vector2 next_uv_stuck = _gcode_generator.FindStepoverPoint(out byte solution_returned_stuck, out int index_collided_stuck, target_world: target_world, sticky_mode: true, solution_requested: curr_solution_flags, max_turning_radians: Mathf.Deg2Rad * 170, blacklisted_indices: curr_line_indices, blacklist_recent_points: true);
+
+                    // If point is valid, update next_uv.
+                    if (solution_returned_stuck != 0b0000) {
+                        Debug.Log("Found a valid point after sharp turn, adding it.");
+                        next_uv = next_uv_stuck;
+                    }
+                    else {
+                        Debug.LogError("No valid point found after sharp turn, returning at problem spot.");
+                        return -100;
+                    }
+                }
+
+                // If we hit a point that is not part of the previous line (-1 means nothing hit), start the breaking counter.
+                if (breaking_counter < 0) {
+                    if (index_collided != -1 && prev_line_indices.Contains(index_collided) == false) {
+                        Debug.Log("Hit an edge that is not part of the previous line, Starting breaking counter.");
+                        breaking_counter = (int)(_gcode_generator._stepover / _gcode_generator._calculation_step_size); // Means 1 more point to add.
+                    }
+                }
+                else {
+                    if (breaking_counter-- == 0) {
+                        Debug.Log("Breaking counter reached zero, breaking.");
                         break;
                     }
                 }
 
-                if (solution_inner_loop == 0) {
-                    Debug.Log("Next UV is NaN.");
-                    // If we get a NaN, we will then delete points from the end of _uv_points until FSP() doesnt return NaN.
-                    while (true) {
-                        _gcode_generator._uv_points.RemoveAt(_gcode_generator._uv_points.Count - 1);
-                        if (_gcode_generator.FindStepoverPoint(out _, out _).x != float.NaN)
-                            break;
-                    }
-                    // Then break to signify the end of the current line.
-                    break;
-                }
-
-                // Add the point to the uv points.
-                _gcode_generator.AddPointsToTargetUvExclusive(next_uv.x, next_uv.y);
+                // Add point to toolpath and hash set.
+                _gcode_generator._uv_points.Add(next_uv);
+                curr_line_indices.Add(_gcode_generator._uv_points.Count - 1);
             }
-
-            // Update primary & secondary targets.
-            // First iteration will create a line from primary to secondary, so we need to update secondary, & vice versa.
-            if (counter_outer % 2 == 0)
-                secondary_target_uv = _gcode_generator._uv_points[^1];
-            else
-                primary_target_uv = _gcode_generator._uv_points[^1];
+            // Update prev_line_indices.
+            prev_line_indices = new HashSet<int>(curr_line_indices);
+            Debug.Log("Completed line " + (counter_outer + 1) + " of " + num_lines);
         }
-
         Debug.Log("DrawRectillinear completed successfully.");
         return 0;
     }
