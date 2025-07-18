@@ -2,34 +2,34 @@ using Oculus.Interaction;
 using TMPro;
 using UnityEngine;
 
-public class GenerateConcentricToolpath : MonoBehaviour {
+public class GenerateRectilinearToolpath : MonoBehaviour {
     public TextMeshPro _button_text;
     BSurfaceGcodeGenerator _gcode_generator;
     ConformalToolpathingManager _toolpathing_manager;
     OVRCameraRig _camera_rig;
     RayInteractable _ray_interactable;
-    public int _concentric_rings_queued = 0;
-    GenerateRectilinearToolpath _rectilinear_toolpath_generator;
+    public int _rectilinear_lines_queued = 0;
+    GenerateConcentricToolpath _concentric_toolpath_generator;
 
     void Awake() {
         _gcode_generator = FindFirstObjectByType<BSurfaceGcodeGenerator>();
         _toolpathing_manager = FindFirstObjectByType<ConformalToolpathingManager>();
         _camera_rig = FindFirstObjectByType<OVRCameraRig>();
         _ray_interactable = GetComponent<RayInteractable>();
-        _rectilinear_toolpath_generator = FindFirstObjectByType<GenerateRectilinearToolpath>();
+        _concentric_toolpath_generator = FindFirstObjectByType<GenerateConcentricToolpath>();
 
         _ray_interactable.WhenSelectingInteractorViewAdded += Selected;
     }
 
     void Selected(IInteractorView arg) {
-        _concentric_rings_queued++;
-        _rectilinear_toolpath_generator._rectilinear_lines_queued = 0;
+        _rectilinear_lines_queued++;
+        _concentric_toolpath_generator._concentric_rings_queued = 0;
     }
 
     void Update() {
-        if (_concentric_rings_queued > 0)
-            _button_text.text = $"Concentric\nRings\nQueued:\n{_concentric_rings_queued}";
+        if (_rectilinear_lines_queued > 0)
+            _button_text.text = $"Rectilinear\nLines\nQueued:\n{_rectilinear_lines_queued}";
         else
-            _button_text.text = "Prepare\nConcentric\nToolpath";
+            _button_text.text = "Prepare\nRectilinear\nToolpath";
     }
 }

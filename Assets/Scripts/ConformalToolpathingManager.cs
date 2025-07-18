@@ -11,21 +11,19 @@ public class ConformalToolpathingManager : MonoBehaviour {
     BsplineManager _control_point_obj;
     public LineRenderer _normal_axis_visual;
     GenerateConcentricToolpath _generate_concentric_toolpath;
+    GenerateRectilinearToolpath _generate_rectilinear_toolpath;
     void Awake() {
         _tracking_space = FindFirstObjectByType<OVRCameraRig>();
         _line_renderer = GetComponent<LineRenderer>();
         _gcode_generator = FindFirstObjectByType<BSurfaceGcodeGenerator>();
         _control_point_obj = FindFirstObjectByType<BsplineManager>();
         _generate_concentric_toolpath = FindFirstObjectByType<GenerateConcentricToolpath>();
+        _generate_rectilinear_toolpath = FindFirstObjectByType<GenerateRectilinearToolpath>();
     }
     void OnDrawGizmos() {
         Awake();
         if (_control_point_obj._control_points != null) {
             UpdateToolpathRenderer();
-
-            Vector3 _debug_rectilinear_target = _control_point_obj.CalcBsurface(_debug_rectilinear_target_uv.x, _debug_rectilinear_target_uv.y);
-            Vector3 _debug_rectilinear_target_world = _control_point_obj.transform.TransformPoint(_debug_rectilinear_target);
-            Debug.DrawLine(_debug_rectilinear_target_world, _debug_rectilinear_target_world + Vector3.up * 0.1f, Color.red);
         }
     }
     void UpdateToolpathRenderer() {
@@ -37,6 +35,8 @@ public class ConformalToolpathingManager : MonoBehaviour {
             _line_renderer.SetPosition(i, point_world);
         }
     }
+
+    #region Update Cycle
     int _last_uv_count = int.MaxValue;
     void Update() {
         // Cursor visual follow right controller.
@@ -70,9 +70,24 @@ public class ConformalToolpathingManager : MonoBehaviour {
         }
 
         // Derive currently selected gcode operation.
-        int paths_queued = _generate_concentric_toolpath._concentric_rings_queued;
-        string operation_type = paths_queued > 0 ? "concentric" : "normal";
-        bool preview_sticky = operation_type == "concentric";
+        string operation_type;
+        int paths_queued;
+        bool preview_sticky;
+        if (_generate_concentric_toolpath._concentric_rings_queued > 0) {
+            operation_type = "concentric";
+            paths_queued = _generate_concentric_toolpath._concentric_rings_queued;
+            preview_sticky = true;
+        }
+        else if (_generate_rectilinear_toolpath._rectilinear_lines_queued > 0) {
+            operation_type = "rectilinear";
+            paths_queued = _generate_rectilinear_toolpath._rectilinear_lines_queued;
+            preview_sticky = true;
+        }
+        else {
+            operation_type = "normal"; // Default to normal toolpathing.
+            paths_queued = 0;
+            preview_sticky = false;
+        }
 
         // Derive a preview of the next drawable toolpath segment.
         Vector2 preview_uv = _gcode_generator.FindStepoverPoint(out byte preview_solution_flags, out _,
@@ -96,6 +111,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
         // Handling button presses.
         bool a_pressed = OVRInput.Get(OVRInput.Button.One, OVRInput.Controller.RTouch);
         bool b_pressed = OVRInput.Get(OVRInput.Button.Two, OVRInput.Controller.RTouch);
+        bool preview_is_cw = (preview_solution_flags & 0b0001) > 0;
         if (operation_type == "normal") {
             // A button -> add points.
             if (a_pressed && (preview_unaddable == false)) {
@@ -107,18 +123,26 @@ public class ConformalToolpathingManager : MonoBehaviour {
                 _gcode_generator._uv_points.RemoveAt(_gcode_generator._uv_points.Count - 1);
         }
         else if (operation_type == "concentric") {
-            Debug.Log("Running concentric.");
             if (a_pressed && (preview_unaddable == false)) {
-                bool concentric_is_cw = (preview_solution_flags & 0b0010) > 0; // If preview is ccw, we draw cw concentric rings.
-                DrawConcentricRing(_gcode_generator._uv_points[^1], concentric_is_cw, paths_queued);
+                DrawConcentricRing(_gcode_generator._uv_points[^1], !preview_is_cw, paths_queued); // If preview is ccw, we draw cw concentric rings.
                 _generate_concentric_toolpath._concentric_rings_queued = 0;
             }
             if (b_pressed) {
                 _generate_concentric_toolpath._concentric_rings_queued = 0;
             }
         }
-        else if (operation_type == "rectilinear") { }
+        else if (operation_type == "rectilinear") {
+            if (a_pressed && (preview_unaddable == false)) {
+                DrawRectilinear(preview_is_cw, paths_queued);
+                _generate_rectilinear_toolpath._rectilinear_lines_queued = 0;
+            }
+            if (b_pressed) {
+                _generate_rectilinear_toolpath._rectilinear_lines_queued = 0;
+            }
+        }
     }
+
+    #endregion Update Cycle
 
     int DrawConcentricRing(Vector2 start_uv, bool dir_cw, int num_rings) {
         // Place the target at uv center's 3D point (doesn't really matter where the target is).
@@ -142,7 +166,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
             int counter_2 = 0;
             while (true) {
                 // Safety escape.
-                if (counter_2++ > 500) {
+                if (counter_2++ > 1000) {
                     Debug.LogError("Safety counter exceeded in DrawConcentricRing inner loop.");
                     return 1; // Error code: Maxed out on inner loops.
                 }
@@ -171,13 +195,10 @@ public class ConformalToolpathingManager : MonoBehaviour {
         return 3; // Error code: none, partial concentric rings completed successfully.
     }
 
-    public Vector2 _debug_rectilinear_target_uv = new(0.5f, 0f);
-    [ContextMenu("DrawRectilinear")]
-    int DrawRectilinear() {
+    // [ContextMenu("DrawRectilinear")]
+    int DrawRectilinear(bool dir_cw, int num_lines) {
         // Temp parameter hard-coding.
         HashSet<int> reference_segment_indices = new(); // Indices of the segment of which the rectilinear pattern will be built off of.
-        bool dir_cw = false; // Solution winding for initial line path.
-        int num_lines = 20;
         for (int i = 0; i < _gcode_generator._uv_points.Count; i++) // Set hashset to all existing uv points.
             reference_segment_indices.Add(i);
         Debug.Log($"DrawRectilinear: num_lines={num_lines}");
