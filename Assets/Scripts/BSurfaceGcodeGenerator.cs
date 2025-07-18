@@ -5,6 +5,7 @@ using System.IO;
 using UnityEditor;
 using Unity.Mathematics;
 using System;
+using MathNet.Numerics;
 
 public class BSurfaceGcodeGenerator : MonoBehaviour {
     public BsplineManager _control_point_obj;
@@ -427,7 +428,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
 
 
                 // Check if it is too close to any other point in _uv_points[_testworthy_indices].
-                if (PosCollidesWithStepover(next_pos, out int curr_index_of_collided)) {
+                if (PosCollidesWithStepover(next_pos, out int curr_index_of_collided, out _)) {
                     is_valid = false;
                     Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 0.9f), Color.grey);
                 }
@@ -536,7 +537,8 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
     /// <summary>
     /// Checks if the next position is valid by checking if it is at least _stepover distance away from every other point in _uv_points.
     /// </summary>
-    bool PosCollidesWithStepover(in Vector3 next_pos, out int index_of_collided) {
+    bool PosCollidesWithStepover(in Vector3 next_pos, out int index_of_collided, out float least_distance) {
+        least_distance = float.MaxValue;
         for (int i_uv = 0; i_uv < _testworthy_indices.Count; i_uv++) {
             if (_testworthy_indices[i_uv] > _uv_points.Count - 1) {
                 _testworthy_indices.RemoveAt(i_uv);
@@ -552,6 +554,8 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
                 index_of_collided = _testworthy_indices[i_uv];
                 return true;
             }
+            if (distance < least_distance)
+                least_distance = distance;
         }
         index_of_collided = -1; // No collision.
         return false;
