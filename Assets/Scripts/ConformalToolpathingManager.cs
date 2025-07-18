@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Linq;
+using Unity.Mathematics;
 using Unity.VisualScripting;
 using UnityEngine;
 
@@ -175,7 +177,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
         // Temp parameter hard-coding.
         HashSet<int> reference_segment_indices = new(); // Indices of the segment of which the rectilinear pattern will be built off of.
         bool dir_cw = false; // Solution winding for initial line path.
-        int num_lines = 40;
+        int num_lines = 20;
         for (int i = 0; i < _gcode_generator._uv_points.Count; i++) // Set hashset to all existing uv points.
             reference_segment_indices.Add(i);
         Debug.Log($"DrawRectilinear: num_lines={num_lines}");
@@ -206,7 +208,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
 
                 // Find the next UV point.
                 Vector2 next_uv = _gcode_generator.FindStepoverPoint(out byte solution_returned, out int index_collided, target_world: target_world, sticky_mode: true, solution_requested: curr_solution_flags, max_turning_radians: Mathf.PI * 0.5f);
-                Debug.Log($"Line {counter_outer + 1,3}, Inner loop {counter_inner,3}, next_uv = ({next_uv.x,7:F4}, {next_uv.y,7:F4}), index_collided = {index_collided,3}, solution_returned = {solution_returned}");
+                // Debug.Log($"Line {counter_outer + 1,3}, Inner loop {counter_inner,3}, next_uv = ({next_uv.x,7:F4}, {next_uv.y,7:F4}), index_collided = {index_collided,3}, solution_returned = {solution_returned}");
 
                 // Stuck handling.
                 if (solution_returned == 0b0000) {
@@ -246,9 +248,74 @@ public class ConformalToolpathingManager : MonoBehaviour {
             }
             // Update prev_line_indices.
             prev_line_indices = new HashSet<int>(curr_line_indices);
-            Debug.Log("Completed line " + (counter_outer + 1) + " of " + num_lines);
+            // Debug.Log("Completed line " + (counter_outer + 1) + " of " + num_lines);
+
+            // Normalize the line that was just drawn (make it straighter)
+            // Find line of best fit.
+            // This relies on the idea that straight in uv space means straight in 3D space.
+            List<Vector2> line_points = new();
+            foreach (int index in curr_line_indices)
+                line_points.Add(_gcode_generator._uv_points[index]);
+            LineOfBestFit(line_points.ToArray(), out float slope, out float intercept, out float max_dist);
+            Debug.Log($"Line of best fit for line {counter_outer + 1}: slope = {slope}, intercept = {intercept}");
+            Debug.DrawLine(new Vector3(0, 0, intercept), new Vector3(-intercept / slope, 0, 0), Color.red, 10f);
+            // Get a 2D eigen vector of the transform that shrinks the points across the line's perpendicular.
+            Vector2 eigen_vector = new Vector2(-slope, 1).normalized;
+
+            float max_shift = 0.01f; // This is a magic number, if it is too large, the line will shrink and intercept an adjacent line. 
+            float lambda = -max_shift / max_dist + 1;
+            if (lambda < 0.5f)
+                lambda = 0.5f;
+            foreach (int uv_point_index in curr_line_indices) {
+                Vector2 eigen_perpendicular = new Vector2(-eigen_vector.y, eigen_vector.x).normalized;
+                Vector2 p = _gcode_generator._uv_points[uv_point_index];
+                Vector2 origin = new(0, intercept); // The origin can just be the y-intercept.
+                Vector2 p_r = p - origin; // AKA, "p_relative"
+                float p_r_along_eigen = Vector2.Dot(p_r, eigen_vector);
+                float p_r_perpendicular_eigen = Vector2.Dot(p_r, eigen_perpendicular);
+
+                // Scale the point along the eigen vector (If the corresponding 3D point doesnt move more than _stepover/2).
+                Vector2 p_r_shift = p_r_along_eigen * eigen_vector * (lambda - 1);
+                Vector2 p_r_scaled = p_r + p_r_shift;
+                Vector2 new_p = p_r_scaled + origin;
+
+                // Update the point in the toolpath if it is inside the uv circle.
+                if (Vector2.Distance(new_p, new Vector2(0.5f, 0.5f)) > 0.5f)
+                    continue;
+                _gcode_generator._uv_points[uv_point_index] = new_p;
+                Debug.Log($"Regularized point {uv_point_index}: {new_p}");
+            }
+            Debug.Log($"Regularized line {counter_outer + 1} of {num_lines}, Shrinking factor = {lambda:F4}");
         }
         Debug.Log("DrawRectillinear completed successfully.");
+
         return 0;
+    }
+
+    void LineOfBestFit(Vector2[] points, out float slope, out float intercept, out float max_dist) {
+        // Calculate the best fit line for the given points.
+        float sum_x = 0, sum_y = 0, sum_xy = 0, sum_xx = 0;
+        int n = points.Length;
+
+        foreach (Vector2 point in points) {
+            sum_x += point.x;
+            sum_y += point.y;
+            sum_xy += point.x * point.y;
+            sum_xx += point.x * point.x;
+
+        }
+
+        slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x);
+        intercept = (sum_y - slope * sum_x) / n;
+
+        // Iterate through all points to find the largest perpendicular distance to the line of best fit.
+        max_dist = 0f;
+        foreach (Vector2 point in points) {
+            // Line: y = slope * x + intercept
+            // Distance from point (x0, y0) to line: |slope*x0 - y0 + intercept| / sqrt(slope^2 + 1)
+            float distance = Mathf.Abs(slope * point.x - point.y + intercept) / Mathf.Sqrt(slope * slope + 1);
+            if (distance > max_dist)
+                max_dist = distance;
+        }
     }
 }

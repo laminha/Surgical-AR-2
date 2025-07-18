@@ -4,8 +4,7 @@ using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 
-public class BsplineManager : MonoBehaviour
-{
+public class BsplineManager : MonoBehaviour {
     public Vector3[,] _control_points;
     public int _size;
     public float[] _knot_vector;
@@ -14,14 +13,12 @@ public class BsplineManager : MonoBehaviour
 
     // This function is awake, not start because the surface needs to be defined before it
     // is used in the others' Start().
-    void Awake()
-    {
+    void Awake() {
         Debug.Log("Awake called in BsplineManager. Defining surface.");
         DefineSurface();
     }
     [ContextMenu("DefineSurface")]
-    void DefineSurface()
-    {
+    void DefineSurface() {
         _size = _knot_vector.Length - _surface_degree - 1;
         Debug.Log("Defining surface with size: " + _size + "x" + _size);
         // Default control points will be placed in a 0.2x0.2 grid, with random heights starting at -0.1.
@@ -34,14 +31,12 @@ public class BsplineManager : MonoBehaviour
                     -0.1f + 0.2f * v / (_control_points.GetLength(0) - 1)
                 );
     }
-    void OnDrawGizmos()
-    { 
+    void OnDrawGizmos() {
         // Check if surface is defined.
-        if (_control_points == null)
-        {
+        if (_control_points == null) {
             DefineSurface();
         }
-        
+
         // If gizmos disabled, exit.
         if (_generate_gizmos == false)
             return;
@@ -50,8 +45,7 @@ public class BsplineManager : MonoBehaviour
         Gizmos.color = Color.violet;
         const float resolution = 5;
         for (int ui = 0; ui < resolution; ui++)
-            for (int vi = 0; vi <= resolution; vi++)
-            {
+            for (int vi = 0; vi <= resolution; vi++) {
                 float u = Mathf.InverseLerp(0, resolution, ui);
                 float v = Mathf.InverseLerp(0, resolution, vi);
                 float u_next = Mathf.InverseLerp(0, resolution, ui + 1);
@@ -70,36 +64,34 @@ public class BsplineManager : MonoBehaviour
         // Draw control points/polygons.
         Gizmos.color = Color.blue;
         for (int i = 0; i < _size; i++)
-            for (int j = 0; j < _size; j++)
-            {
-                Gizmos.DrawSphere(transform.TransformPoint(_control_points[i, j]), 0.001f*transform.localScale.x);
+            for (int j = 0; j < _size; j++) {
+                Gizmos.DrawSphere(transform.TransformPoint(_control_points[i, j]), 0.001f * transform.localScale.x);
                 // Use try-catch to skip bad indices (easier than if statements).
-                try
-                {
+                try {
                     Gizmos.DrawLine(
                         transform.TransformPoint(_control_points[i, j]),
                         transform.TransformPoint(_control_points[i, j + 1])
                     );
-                } catch { }
-                
-                try
-                {
+                }
+                catch { }
+
+                try {
                     Gizmos.DrawLine(
                         transform.TransformPoint(_control_points[i, j]),
                         transform.TransformPoint(_control_points[i + 1, j])
                     );
-                } catch { }
+                }
+                catch { }
             }
 
         // Draw du, dv, and normal vector at integer+editor_time u&v.
         for (int ui = -1; ui <= resolution; ui++)
-            for (int vi = -1; vi <= resolution; vi++)
-            {
+            for (int vi = -1; vi <= resolution; vi++) {
                 float editor_time_mod2 = (float)EditorApplication.timeSinceStartup % 2;
                 float editor_time_mod2_1 = editor_time_mod2 * ((editor_time_mod2 < 1) ? 1f : 0f);
                 float editor_time_mod2_2 = (editor_time_mod2 - 1) * ((editor_time_mod2 >= 1) ? 1f : 0f);
                 float u_moving = Mathf.InverseLerp(0, resolution, ui + editor_time_mod2_1);
-                float v_moving = Mathf.InverseLerp(0, resolution, vi + editor_time_mod2_2);;
+                float v_moving = Mathf.InverseLerp(0, resolution, vi + editor_time_mod2_2); ;
 
                 Vector3 surface_pos = CalcBsurface(u_moving, v_moving);
                 Vector3 u_vec = CalcBSurfaceVelocityU(u_moving, v_moving).normalized;
@@ -122,8 +114,7 @@ public class BsplineManager : MonoBehaviour
                 );
             }
     }
-    public float CoxDeBoorAlgorithmRecursive(int target_knot, int degree, float t)
-    {
+    public float CoxDeBoorAlgorithmRecursive(int target_knot, int degree, float t) {
         // Define variables (const)
         int k = target_knot;
         int d = degree;
@@ -134,8 +125,7 @@ public class BsplineManager : MonoBehaviour
             Debug.LogError($"t is outside of partitions of unity. t = {t}");
 
         // Return base case.
-        if (d == 0)
-        {
+        if (d == 0) {
             if (k == _knot_vector.Length - 2) // Index of second last knot.
                 return (t >= tk[k] && t <= tk[k + 1]) ? 1 : 0;
             else
@@ -154,58 +144,49 @@ public class BsplineManager : MonoBehaviour
             downward_slope_term * CoxDeBoorAlgorithmRecursive(k + 1, d - 1, t)
         );
     }
-    public float CoxDeBoorAlgorithmDerivative(int target_knot, float t)
-    {
+    public float CoxDeBoorAlgorithmDerivative(int target_knot, float t) {
         // Just use difference quotient, should be fine.
         const float h = 0.001f;
         // Get the basis value at t.
         float curr_val = CoxDeBoorAlgorithmRecursive(target_knot, _surface_degree, t);
         // Check if a step to the left will leave the partitions of unity.
         // Will work as long as the partitions of unity are wider than 2*h (basically always works).
-        if (t - h < _knot_vector[_surface_degree] == false)
-        {
+        if (t - h < _knot_vector[_surface_degree] == false) {
             float left_diff = CoxDeBoorAlgorithmRecursive(target_knot, _surface_degree, t - h);
             return (curr_val - left_diff) / h;
         }
-        else
-        {
+        else {
             float right_diff = CoxDeBoorAlgorithmRecursive(target_knot, _surface_degree, t + h);
             return (right_diff - curr_val) / h;
         }
     }
-    public float BasisFunction3D(int control_point_index_u, int control_point_index_v, float u, float v)
-    {
+    public float BasisFunction3D(int control_point_index_u, int control_point_index_v, float u, float v) {
         return (
             CoxDeBoorAlgorithmRecursive(control_point_index_u, _surface_degree, u) *
             CoxDeBoorAlgorithmRecursive(control_point_index_v, _surface_degree, v)
         );
     }
-    float VelocityBasisFunctionU3D(int control_point_index_u, int control_point_index_v, float u, float v)
-    {
+    float VelocityBasisFunctionU3D(int control_point_index_u, int control_point_index_v, float u, float v) {
         return (
             CoxDeBoorAlgorithmDerivative(control_point_index_u, u) *
             CoxDeBoorAlgorithmRecursive(control_point_index_v, _surface_degree, v)
         );
     }
-    float VelocityBasisFunctionV3D(int control_point_index_u, int control_point_index_v, float u, float v)
-    {
+    float VelocityBasisFunctionV3D(int control_point_index_u, int control_point_index_v, float u, float v) {
         return (
-            CoxDeBoorAlgorithmRecursive(control_point_index_u, _surface_degree, u) * 
+            CoxDeBoorAlgorithmRecursive(control_point_index_u, _surface_degree, u) *
             CoxDeBoorAlgorithmDerivative(control_point_index_v, v)
         );
     }
-    public Vector3 CalcBsurface(float u, float v)
-    {
+    public Vector3 CalcBsurface(float u, float v) {
         // If u or v are not in range [0,1], logerror and return zero vector.
-        if (u < 0 || u > 1 || v < 0 || v > 1)
-        {
+        if (u < 0 || u > 1 || v < 0 || v > 1) {
             Debug.LogError($"u or v are out of range: u = {u}, v = {v}");
             return Vector3.zero;
         }
         Vector3 output = new(0, 0, 0);
         for (int i = 0; i < _size; i++)
-            for (int j = 0; j < _size; j++)
-            {
+            for (int j = 0; j < _size; j++) {
                 // Continue if u or v are outside the 5 knots that the basis function is > 0.
                 if (u < _knot_vector[i] || u > _knot_vector[i + _surface_degree + 1] ||
                     v < _knot_vector[j] || v > _knot_vector[j + _surface_degree + 1])
@@ -214,11 +195,9 @@ public class BsplineManager : MonoBehaviour
             }
         return output;
     }
-    public Vector3 CalcBSurfaceVelocityU(float u, float v)
-    {
+    public Vector3 CalcBSurfaceVelocityU(float u, float v) {
         // If u or v are not in range [0,1], logerror and return zero vector.
-        if (u < 0 || u > 1 || v < 0 || v > 1)
-        {
+        if (u < 0 || u > 1 || v < 0 || v > 1) {
             Debug.LogError($"u or v are out of range: u = {u}, v = {v}");
             return Vector3.zero;
         }
@@ -233,18 +212,15 @@ public class BsplineManager : MonoBehaviour
             }
         return output;
     }
-    public Vector3 CalcBSurfaceVelocityV(float u, float v)
-    {
+    public Vector3 CalcBSurfaceVelocityV(float u, float v) {
         // If u or v are not in range [0,1], logerror and return zero vector.
-        if (u < 0 || u > 1 || v < 0 || v > 1)
-        {
+        if (u < 0 || u > 1 || v < 0 || v > 1) {
             Debug.LogError($"u or v are out of range: u = {u}, v = {v}");
             return Vector3.zero;
         }
         Vector3 output = new(0, 0, 0);
         for (int i = 0; i < _size; i++)
-            for (int j = 0; j < _size; j++)
-            {
+            for (int j = 0; j < _size; j++) {
                 // Continue if u or v are outside the 5 knots that the basis function is > 0.
                 if (u < _knot_vector[i] || u > _knot_vector[i + _surface_degree + 1] ||
                     v < _knot_vector[j] || v > _knot_vector[j + _surface_degree + 1])

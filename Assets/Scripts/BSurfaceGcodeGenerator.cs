@@ -40,8 +40,14 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
             max_turning_radians: Mathf.Deg2Rad * 170,
             blacklist_recent_points: true
         ); // Colon is named argument syntax for optional parameters.
+
         // Debug.Log($"FindStepoverPoint returned: {Convert.ToString(fsp_output, 2).PadLeft(4, '0')}");
         // Debug.Log($"Index of collided: {index_of_collided}");
+
+        // Draw the uv toolpath in uv space, on the xz plane.
+        for (int i = 0; i < _uv_points.Count - 1; i++) {
+            Debug.DrawLine(new Vector3(_uv_points[i].x, 0, _uv_points[i].y), new Vector3(_uv_points[i + 1].x, 0, _uv_points[i + 1].y), Color.green);
+        }
     }
     #endregion OnDrawGizmos
 
