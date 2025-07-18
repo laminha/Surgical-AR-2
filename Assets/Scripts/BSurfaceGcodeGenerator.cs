@@ -428,7 +428,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
 
 
                 // Check if it is too close to any other point in _uv_points[_testworthy_indices].
-                if (PosCollidesWithStepover(next_pos, out int curr_index_of_collided, out _)) {
+                if (PosCollidesWithStepover(next_pos, curr_testworthy_indices, out int curr_index_of_collided, out _)) {
                     is_valid = false;
                     Debug.DrawLine(curr_world, Vector3.LerpUnclamped(curr_world, next_world, 0.9f), Color.grey);
                 }
@@ -537,21 +537,20 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
     /// <summary>
     /// Checks if the next position is valid by checking if it is at least _stepover distance away from every other point in _uv_points.
     /// </summary>
-    bool PosCollidesWithStepover(in Vector3 next_pos, out int index_of_collided, out float least_distance) {
+    bool PosCollidesWithStepover(in Vector3 next_pos, in List<int> testworthy_indices, out int index_of_collided, out float least_distance) {
         least_distance = float.MaxValue;
-        for (int i_uv = 0; i_uv < _testworthy_indices.Count; i_uv++) {
-            if (_testworthy_indices[i_uv] > _uv_points.Count - 1) {
-                _testworthy_indices.RemoveAt(i_uv);
+        for (int i_uv = 0; i_uv < testworthy_indices.Count; i_uv++) {
+            if (testworthy_indices[i_uv] > _uv_points.Count - 1) {
                 continue;
             }
-            Vector2 other_uv = _uv_points[_testworthy_indices[i_uv]];
+            Vector2 other_uv = _uv_points[testworthy_indices[i_uv]];
             // Calculate the 3D position of the other uv point.
             Vector3 other_pos = _control_point_obj.CalcBsurface(other_uv.x, other_uv.y);
             // Calculate the distance between the next point and the other point.
             float distance = Vector3.Distance(next_pos, other_pos);
             // If the distance is less than the stepover distance, the point is not valid.
             if (distance < _stepover) {
-                index_of_collided = _testworthy_indices[i_uv];
+                index_of_collided = testworthy_indices[i_uv];
                 return true;
             }
             if (distance < least_distance)
