@@ -587,4 +587,19 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         // Undo tan2 to get the angle in uv space.
         return Mathf.Atan2(tan2_uv.y, tan2_uv.x);
     }
+
+    float MinDistInUvSpace(int target_uv_index, List<int> blacklist_indices, out int index_of_nearest) {
+        float min_dist = float.MaxValue;
+        index_of_nearest = -1;
+        Vector2 target_uv = _uv_points[target_uv_index];
+        for (int i = 0; i < _uv_points.Count; i++) {
+            if (blacklist_indices.Contains(i)) continue;
+            float dist = Vector2.Distance(target_uv, _uv_points[i]);
+            if (dist < min_dist) {
+                min_dist = dist;
+                index_of_nearest = i;
+            }
+        }
+        return min_dist;
+    }
 }
