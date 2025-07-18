@@ -262,7 +262,11 @@ public class ConformalToolpathingManager : MonoBehaviour {
             // Get a 2D eigen vector of the transform that shrinks the points across the line's perpendicular.
             Vector2 eigen_vector = new Vector2(-slope, 1).normalized;
 
-            float max_shift = 0.01f; // This is a magic number, if it is too large, the line will shrink and intercept an adjacent line. 
+            // Get the equivalent stepover in uv space.
+            int mid_line_point_index = _gcode_generator._uv_points.Count - counter_inner / 2; // Just some point in the middle.
+            float uv_stepover = _gcode_generator.MinDistInUvSpace(mid_line_point_index, curr_line_indices, out _);
+            float max_shift = uv_stepover / 2;
+            Debug.Log($"Max shift in uv space: {max_shift:F4}, uv_stepover: {uv_stepover:F4}");
             float lambda = -max_shift / max_dist + 1;
             if (lambda < 0.5f)
                 lambda = 0.5f;

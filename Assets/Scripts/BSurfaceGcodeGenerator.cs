@@ -588,7 +588,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         return Mathf.Atan2(tan2_uv.y, tan2_uv.x);
     }
 
-    float MinDistInUvSpace(int target_uv_index, List<int> blacklist_indices, out int index_of_nearest) {
+    public float MinDistInUvSpace(int target_uv_index, HashSet<int> blacklist_indices, out int index_of_nearest) {
         float min_dist = float.MaxValue;
         index_of_nearest = -1;
         Vector2 target_uv = _uv_points[target_uv_index];
