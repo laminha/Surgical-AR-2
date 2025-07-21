@@ -119,8 +119,8 @@ public class ConformalToolpathingManager : MonoBehaviour {
                 _gcode_generator._uv_points.Add(preview_uv);
             }
             // B button -> delete points.
-            if (b_pressed && _gcode_generator._uv_points.Count > 0)
-                _gcode_generator._uv_points.RemoveAt(_gcode_generator._uv_points.Count - 1);
+            // if (b_pressed && _gcode_generator._uv_points.Count > 0)
+            //     _gcode_generator._uv_points.RemoveAt(_gcode_generator._uv_points.Count - 1);
         }
         else if (operation_type == "concentric") {
             if (a_pressed && (preview_unaddable == false)) {
