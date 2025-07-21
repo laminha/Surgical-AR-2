@@ -5,7 +5,6 @@ public class EnableOnButtonTimed : MonoBehaviour {
     public float timeout = 1f;
     FollowClosestInLinerenderer _follow_closest_toolpath;
     MeshRenderer _mesh_renderer;
-
     void Start() {
         _follow_closest_toolpath = GetComponent<FollowClosestInLinerenderer>();
         _mesh_renderer = GetComponent<MeshRenderer>();

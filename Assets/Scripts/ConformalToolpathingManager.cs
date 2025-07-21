@@ -12,6 +12,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
     public LineRenderer _normal_axis_visual;
     GenerateConcentricToolpath _generate_concentric_toolpath;
     GenerateRectilinearToolpath _generate_rectilinear_toolpath;
+    public FollowClosestInLinerenderer _rectilinear_selection_cursor;
     void Awake() {
         _tracking_space = FindFirstObjectByType<OVRCameraRig>();
         _line_renderer = GetComponent<LineRenderer>();
@@ -26,7 +27,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
             UpdateToolpathRenderer();
         }
     }
-    void UpdateToolpathRenderer() {
+    public void UpdateToolpathRenderer() {
         // Update the toolpath line renderer.
         _line_renderer.positionCount = _gcode_generator._uv_points.Count;
         for (int i = 0; i < _gcode_generator._uv_points.Count; i++) {
@@ -38,6 +39,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
 
     #region Update Cycle
     int _last_uv_count = int.MaxValue;
+    int _rectilinear_state = 0;
     void Update() {
         // Cursor visual follow right controller.
         transform.position = _tracking_space.rightControllerAnchor.TransformPoint(_tracking_space.rightControllerAnchor.localPosition + Vector3.forward * 0.1f);
@@ -110,7 +112,11 @@ public class ConformalToolpathingManager : MonoBehaviour {
 
         // Handling button presses.
         bool a_pressed = OVRInput.Get(OVRInput.Button.One, OVRInput.Controller.RTouch);
+        bool a_just_pressed = OVRInput.GetDown(OVRInput.Button.One, OVRInput.Controller.RTouch);
+        bool a_just_released = OVRInput.GetUp(OVRInput.Button.One, OVRInput.Controller.RTouch);
         bool b_pressed = OVRInput.Get(OVRInput.Button.Two, OVRInput.Controller.RTouch);
+        bool b_just_pressed = OVRInput.GetDown(OVRInput.Button.Two, OVRInput.Controller.RTouch);
+        bool b_just_released = OVRInput.GetUp(OVRInput.Button.Two, OVRInput.Controller.RTouch);
         bool preview_is_cw = (preview_solution_flags & 0b0001) > 0;
         if (operation_type == "normal") {
             // A button -> add points.
@@ -122,23 +128,42 @@ public class ConformalToolpathingManager : MonoBehaviour {
             // if (b_pressed && _gcode_generator._uv_points.Count > 0)
             //     _gcode_generator._uv_points.RemoveAt(_gcode_generator._uv_points.Count - 1);
         }
-        else if (operation_type == "concentric") {
-            if (a_pressed && (preview_unaddable == false)) {
+        if (operation_type == "concentric") {
+            if (a_just_pressed && (preview_unaddable == false)) {
                 DrawConcentricRing(_gcode_generator._uv_points[^1], !preview_is_cw, paths_queued); // If preview is ccw, we draw cw concentric rings.
                 _generate_concentric_toolpath._concentric_rings_queued = 0;
             }
-            if (b_pressed) {
+            if (b_just_pressed) {
                 _generate_concentric_toolpath._concentric_rings_queued = 0;
             }
         }
-        else if (operation_type == "rectilinear") {
-            if (a_pressed && (preview_unaddable == false)) {
-                DrawRectilinear(preview_is_cw, paths_queued);
+
+        if (operation_type == "rectilinear") {
+            _rectilinear_selection_cursor.GetComponent<MeshRenderer>().enabled = true;
+            if (_rectilinear_state == 0)
+                _rectilinear_selection_cursor.enabled = true;
+            else
+                _rectilinear_selection_cursor.enabled = false;
+            if (a_just_pressed && (preview_unaddable == false)) {
+                if (_rectilinear_state == 0) {
+                    _rectilinear_state = 1;
+                }
+                else {
+                    HashSet<int> selection_to_end_indices = new();
+                    for (int i = _rectilinear_selection_cursor._index_of_closest; i < _gcode_generator._uv_points.Count; i++)
+                        selection_to_end_indices.Add(i);
+                    DrawRectilinear(preview_is_cw, paths_queued, selection_to_end_indices);
+                    _generate_rectilinear_toolpath._rectilinear_lines_queued = 0;
+                    _rectilinear_state = 0;
+                }
+            }
+            if (b_just_pressed) {
                 _generate_rectilinear_toolpath._rectilinear_lines_queued = 0;
             }
-            if (b_pressed) {
-                _generate_rectilinear_toolpath._rectilinear_lines_queued = 0;
-            }
+        }
+        else {
+            _rectilinear_selection_cursor.enabled = false;
+            _rectilinear_selection_cursor.GetComponent<MeshRenderer>().enabled = false;
         }
     }
 
@@ -196,11 +221,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
     }
 
     // [ContextMenu("DrawRectilinear")]
-    int DrawRectilinear(bool dir_cw, int num_lines) {
-        // Temp parameter hard-coding.
-        HashSet<int> reference_segment_indices = new(); // Indices of the segment of which the rectilinear pattern will be built off of.
-        for (int i = 0; i < _gcode_generator._uv_points.Count; i++) // Set hashset to all existing uv points.
-            reference_segment_indices.Add(i);
+    int DrawRectilinear(bool dir_cw, int num_lines, HashSet<int> reference_segment_indices) {
         Debug.Log($"DrawRectilinear: num_lines={num_lines}");
 
         // Definitions.
