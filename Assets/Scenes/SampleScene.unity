@@ -62724,6 +62724,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _normal_axis_visual: {fileID: 424483772}
+  _rectilinear_selection_cursor: {fileID: 2010695566}
 --- !u!120 &1550822568
 LineRenderer:
   serializedVersion: 2
@@ -84890,7 +84891,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 0de2db05b552cba4bb017ede430f6e81, type: 2}
+  - {fileID: 2100000, guid: 4801cd416677527498dcac828bde6de8, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
