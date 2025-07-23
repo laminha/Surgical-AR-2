@@ -5,10 +5,10 @@ using UnityEditor;
 using UnityEngine;
 
 public class BsplineManager : MonoBehaviour {
-    public Vector3[,] _control_points;
-    public int _size;
-    public float[] _knot_vector;
-    public bool _generate_gizmos = true; // Toggle to disable gizmos in the scene view.
+    public Vector3[,] _control_points = null;
+    public int _size = -1;
+    public float[] _knot_vector = null;
+    public bool _generate_gizmos = false; // Toggle to disable gizmos in the scene view.
     const int _surface_degree = 3;
 
     // This function is awake, not start because the surface needs to be defined before it
@@ -17,8 +17,10 @@ public class BsplineManager : MonoBehaviour {
         Debug.Log("Awake called in BsplineManager. Defining surface.");
         DefineSurface();
     }
+
     [ContextMenu("DefineSurface")]
     void DefineSurface() {
+        const float _surfaceDefinitionCorrectionRoot = 1.8f;
         _size = _knot_vector.Length - _surface_degree - 1;
         Debug.Log("Defining surface with size: " + _size + "x" + _size);
         // Default control points will be placed in a 0.2x0.2 grid, with random heights starting at -0.1.
@@ -26,14 +28,20 @@ public class BsplineManager : MonoBehaviour {
         for (int u = 0; u < _control_points.GetLength(0); u++)
             for (int v = 0; v < _control_points.GetLength(0); v++)
                 _control_points[u, v] = new Vector3(
-                    -0.1f + 0.2f * u / (_control_points.GetLength(0) - 1),
-                    -0.075f,// + UnityEngine.Random.Range(-0.025f, 0.025f),
-                    -0.1f + 0.2f * v / (_control_points.GetLength(0) - 1)
+                    0.1f * Root(2f * u / (_control_points.GetLength(0) - 1) - 1, _surfaceDefinitionCorrectionRoot),
+                    -0.075f, // + UnityEngine.Random.Range(-0.025f, 0.025f),
+                    0.1f * Root(2f * v / (_control_points.GetLength(1) - 1) - 1, _surfaceDefinitionCorrectionRoot)
                 );
+    }
+    float Root(float input, float root) {
+        if (input > 0)
+            return Mathf.Pow(input, 1 / root);
+        else
+            return -Mathf.Pow(-input, 1 / root);
     }
     void OnDrawGizmos() {
         // Check if surface is defined.
-        if (_control_points == null) {
+        if (_size < 0 || _control_points == null) {
             DefineSurface();
         }
 
