@@ -221,7 +221,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
     }
 
     // [ContextMenu("DrawRectilinear")]
-    int DrawRectilinear(bool dir_cw, int num_lines, HashSet<int> reference_segment_indices) {
+    int DrawRectilinear(bool dir_cw, int num_lines, HashSet<int> reference_segment_indices, bool enable_straightening = true) {
         Debug.Log($"DrawRectilinear: num_lines={num_lines}");
 
         // Definitions.
@@ -292,16 +292,19 @@ public class ConformalToolpathingManager : MonoBehaviour {
             prev_line_indices = new HashSet<int>(curr_line_indices);
             // Debug.Log("Completed line " + (counter_outer + 1) + " of " + num_lines);
 
-            // Normalize the line that was just drawn (make it straighter)
+            if (enable_straightening == false) {
+                continue; // Skip line straightening.
+            }
+            // Straighten the line that was just drawn. This relies on the idea that straight in uv space means straight in 3D space.
             // Find line of best fit.
-            // This relies on the idea that straight in uv space means straight in 3D space.
             List<Vector2> line_points = new();
             foreach (int index in curr_line_indices)
                 line_points.Add(_gcode_generator._uv_points[index]);
             LineOfBestFit(line_points.ToArray(), out float slope, out float intercept, out float max_dist);
             Debug.Log($"Line of best fit for line {counter_outer + 1}: slope = {slope}, intercept = {intercept}");
             Debug.DrawLine(new Vector3(0, 0, intercept), new Vector3(-intercept / slope, 0, 0), Color.red, 10f);
-            // Get a 2D eigen vector of the transform that shrinks the points across the line's perpendicular.
+            
+            // Get a unit vector perpendicular to the slope.
             Vector2 eigen_vector = new Vector2(-slope, 1).normalized;
 
             // Get the equivalent stepover in uv space.
