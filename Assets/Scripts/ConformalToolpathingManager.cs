@@ -1,8 +1,9 @@
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using Unity.Mathematics;
-using Unity.VisualScripting;
+using System.IO;
+using NUnit.Framework.Internal.Execution;
 using UnityEngine;
+using UnityEngine.LightTransport;
 
 public class ConformalToolpathingManager : MonoBehaviour {
     OVRCameraRig _tracking_space;
@@ -303,7 +304,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
             LineOfBestFit(line_points.ToArray(), out float slope, out float intercept, out float max_dist);
             Debug.Log($"Line of best fit for line {counter_outer + 1}: slope = {slope}, intercept = {intercept}");
             Debug.DrawLine(new Vector3(0, 0, intercept), new Vector3(-intercept / slope, 0, 0), Color.red, 10f);
-            
+
             // Get a unit vector perpendicular to the slope.
             Vector2 eigen_vector = new Vector2(-slope, 1).normalized;
 
@@ -366,5 +367,111 @@ public class ConformalToolpathingManager : MonoBehaviour {
             if (distance > max_dist)
                 max_dist = distance;
         }
+    }
+
+    void StepoverAtPoint(int index, out int index_of_closest, out float distance_of_closest) {
+        // Definitions.
+        Vector3[] points = new Vector3[_line_renderer.positionCount];
+        _line_renderer.GetPositions(points);
+
+        // Iterate through all points (n), recording their closest point (m) that isnt connected to n with points that are all closer than m is to n.
+        // Iterate from n to 0 (backwards) until a decrement in distance is recorded (index n2)
+        // Iterate from n2 to 0, recording the closest point measured (index nclo, distance distclo).
+        // Do the same from n to end (forwards).
+        // return index and distance of closest of both n-0 and n-end iterations.
+        // Backwards.
+        int closest_index_backwards = -1;
+        float closest_distance_backwards = float.MaxValue;
+        {
+            float prev_dist = -1;
+            int searching_start_index = -1;
+            for (int i = index; i >= 0; i--) {
+                float curr_dist = Vector3.Distance(_line_renderer.GetPosition(index), _line_renderer.GetPosition(i));
+                if (prev_dist > curr_dist) {
+                    searching_start_index = i;
+                    break;
+                }
+                prev_dist = curr_dist;
+            }
+            for (int i = searching_start_index; i >= 0; i--) {
+                float curr_dist = Vector3.Distance(_line_renderer.GetPosition(index), _line_renderer.GetPosition(i));
+                if (curr_dist < closest_distance_backwards) {
+                    closest_distance_backwards = curr_dist;
+                    closest_index_backwards = i;
+                }
+            }
+        }
+        // Forwards.
+        int closest_index_forwards = -1;
+        float closest_distance_forwards = float.MaxValue;
+        {
+            float prev_dist = -1;
+            int searching_start_index = int.MaxValue;
+            for (int i = index; i < _line_renderer.positionCount; i++) {
+                float curr_dist = Vector3.Distance(_line_renderer.GetPosition(index), _line_renderer.GetPosition(i));
+                if (prev_dist > curr_dist) {
+                    searching_start_index = i;
+                    break;
+                }
+                prev_dist = curr_dist;
+            }
+            for (int i = searching_start_index; i < _line_renderer.positionCount; i++) {
+                float curr_dist = Vector3.Distance(_line_renderer.GetPosition(index), _line_renderer.GetPosition(i));
+                if (curr_dist < closest_distance_forwards) {
+                    closest_distance_forwards = curr_dist;
+                    closest_index_forwards = i;
+                }
+            }
+        }
+        bool forward_is_closer = closest_distance_forwards < closest_distance_backwards;
+        int idx1 = forward_is_closer ? closest_index_forwards : closest_index_backwards;
+        // int idx2 = !forward_is_closer ? closest_index_forwards : closest_index_backwards;
+        // if (idx1 != -1)
+        //     Debug.DrawLine(_line_renderer.GetPosition(index), _line_renderer.GetPosition(idx1), new Color(1, 1, 1), 10);
+        // if (idx2 != -1)
+        //     Debug.DrawLine(_line_renderer.GetPosition(index), _line_renderer.GetPosition(idx2), new Color(0.5f, 0.5f, 0.5f), 10);
+
+        index_of_closest = idx1;
+        distance_of_closest = forward_is_closer ? closest_distance_forwards : closest_distance_backwards;
+    }
+
+    [ContextMenu("RecordStepoverData")]
+    void RecordStepoverData() {
+        string filepath = Path.Combine(Application.persistentDataPath, "StepoverData.csv");
+        string stepover_data = "";
+        Vector3 prev_i_world = new();
+        for (int i = 0; i < _line_renderer.positionCount; i++) {
+            StepoverAtPoint(i, out int index_other, out _);
+            Vector2 i_uv = _gcode_generator._uv_points[i];
+            Vector2 index_other_uv = _gcode_generator._uv_points[index_other];
+            Vector3 i_local_pos = _control_point_obj.CalcBsurface(i_uv.x, i_uv.y);
+            Vector3 index_other_local_pos = _control_point_obj.CalcBsurface(index_other_uv.x, index_other_uv.y);
+            float local_dist = Vector3.Distance(i_local_pos, index_other_local_pos);
+            stepover_data += $"{i},{local_dist}\n";
+            Debug.Log($"Recorded for index {i}, {local_dist}.");
+
+            Vector3 i_world = _control_point_obj.transform.TransformPoint(i_local_pos);
+            if (i != 0) {
+                float color_scalar = (local_dist - 0.004f) * (local_dist - 0.004f) / 0.004f / 0.004f;
+                Debug.DrawLine(i_world, prev_i_world, new(1, 1 - color_scalar, 1 - color_scalar), 10);
+            }
+            prev_i_world = i_world;
+        }
+        string currentTime = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+        try {
+            File.WriteAllText(filepath, "modified: " + currentTime + "\n" + stepover_data);
+        }
+        catch (IOException ex) {
+            Debug.LogError("Failed to write G-code file: " + ex.Message);
+        }
+        catch (UnauthorizedAccessException ex) {
+            Debug.LogError("Access denied when writing G-code file: " + ex.Message);
+        }
+        catch (Exception ex) {
+            Debug.LogError("Unexpected error when writing G-code file: " + ex.Message);
+        }
+
+        Debug.Log($"Stepover data recorded in {filepath}.");
+
     }
 }

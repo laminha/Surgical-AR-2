@@ -37,6 +37,21 @@ public class GcodeGenerator : MonoBehaviour
         }
 
         Debug.Log("calvin gcode written\n" + gcode_movements + "\nin\n" + _file_path);
-        File.WriteAllText(_file_path, gcode_movements);
+        try
+        {
+            File.WriteAllText(_file_path, gcode_movements);
+        }
+        catch (IOException ex)
+        {
+            Debug.LogError("Failed to write G-code file: " + ex.Message);
+        }
+        catch (System.UnauthorizedAccessException ex)
+        {
+            Debug.LogError("Access denied when writing G-code file: " + ex.Message);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError("Unexpected error when writing G-code file: " + ex.Message);
+        }
     }
 }
