@@ -25,6 +25,9 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         _file_path = Path.Combine(Application.persistentDataPath, _file_name);
     }
 
+    public void ClearToolpath() {
+    _uv_points.Clear();
+    }
 
     #region OnDrawGizmos
     void OnDrawGizmos() {
