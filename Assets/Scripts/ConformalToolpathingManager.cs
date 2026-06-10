@@ -14,6 +14,11 @@ public class ConformalToolpathingManager : MonoBehaviour {
     GenerateConcentricToolpath _generate_concentric_toolpath;
     GenerateRectilinearToolpath _generate_rectilinear_toolpath;
     public FollowClosestInLinerenderer _rectilinear_selection_cursor;
+    public GameObject _start_point_marker; // Assign a sphere GameObject in the Inspector.
+    enum ToolpathState { SelectStart, Ready }
+    ToolpathState _state = ToolpathState.Ready; // Default to Ready until "Set Start Point" is pressed.
+    Vector2 _prev_start_uv = new Vector2(0f, 0.5f);
+    
     void Awake() {
         _tracking_space = FindFirstObjectByType<OVRCameraRig>();
         _line_renderer = GetComponent<LineRenderer>();
@@ -37,6 +42,16 @@ public class ConformalToolpathingManager : MonoBehaviour {
             _line_renderer.SetPosition(i, point_world);
         }
     }
+    public bool IsInSelectStartMode() {
+        return _state == ToolpathState.SelectStart;
+    }
+    public void EnterSelectStartMode() {
+        _prev_start_uv = _gcode_generator._start_uv;
+        _state = ToolpathState.SelectStart;
+        _gcode_generator._uv_points.Clear();
+        _last_uv_count = int.MaxValue;
+        Debug.Log("Entering SelectStart mode.");
+    }
 
     #region Update Cycle
     int _last_uv_count = int.MaxValue;
@@ -45,18 +60,69 @@ public class ConformalToolpathingManager : MonoBehaviour {
         // Cursor visual follow right controller.
         transform.position = _tracking_space.rightControllerAnchor.TransformPoint(_tracking_space.rightControllerAnchor.localPosition + Vector3.forward * 0.1f);
 
+        // --- SelectStart state: snap controller to perimeter and wait for A press ---
+        if (_state == ToolpathState.SelectStart) {
+            // Find the closest point on the UV perimeter circle to the controller.
+            Vector3 ctrl_local = _control_point_obj.transform.InverseTransformPoint(transform.position);
+            float best_theta = 0f;
+            float best_dist = float.MaxValue;
+            for (int i = 0; i < 100; i++) {
+                float theta = 2 * Mathf.PI * i / 100f;
+                float u = 0.5f - 0.5f * Mathf.Cos(theta);
+                float v = 0.5f - 0.5f * Mathf.Sin(theta);
+                Vector3 perim_pos = _control_point_obj.CalcBsurface(u, v);
+                float dist = Vector3.Distance(ctrl_local, perim_pos);
+                if (dist < best_dist) {
+                    best_dist = dist;
+                    best_theta = theta;
+                }
+            }
+            Vector2 snapped_uv = new(0.5f - 0.5f * Mathf.Cos(best_theta), 0.5f - 0.5f * Mathf.Sin(best_theta));
+
+            // Move marker to snapped position.
+            if (_start_point_marker != null) {
+                _start_point_marker.SetActive(true);
+                Vector3 snapped_local = _control_point_obj.CalcBsurface(snapped_uv.x, snapped_uv.y);
+                _start_point_marker.transform.position = _control_point_obj.transform.TransformPoint(snapped_local);
+            }
+
+            // Index trigger -> lock in the start point and transition to Ready.
+            if (OVRInput.GetDown(OVRInput.Button.PrimaryIndexTrigger, OVRInput.Controller.RTouch)) {
+                _gcode_generator._start_uv = snapped_uv;
+                _gcode_generator._uv_points.Clear();
+                _gcode_generator._uv_points.Add(snapped_uv);
+                _last_uv_count = int.MaxValue; // Force renderer update.
+                _state = ToolpathState.Ready;
+                Debug.Log($"Start point locked at UV: {snapped_uv}");
+            }
+
+            // B press -> cancel and restore previous start point.
+            if (OVRInput.GetDown(OVRInput.Button.Two, OVRInput.Controller.RTouch)) {
+                _gcode_generator._start_uv = _prev_start_uv;
+                _gcode_generator._uv_points.Clear();
+                _gcode_generator._uv_points.Add(_prev_start_uv);
+                _last_uv_count = int.MaxValue;
+                if (_start_point_marker != null)
+                    _start_point_marker.SetActive(false);
+                _state = ToolpathState.Ready;
+                Debug.Log("Cancelled start point selection, restored previous start.");
+            }
+            
+            return; // Don't run the rest of Update while selecting.
+        }
+
+        // --- Ready state: normal toolpathing logic below ---
+
         // Handle empty _uv_points case.
         if (_gcode_generator._uv_points.Count == 0)
-            _gcode_generator._uv_points.Add(new Vector2(0f, 0.5f)); // Add a default point at the left edge.
+            _gcode_generator._uv_points.Add(_gcode_generator._start_uv);
 
-        // Update toolpath line renderer.
-        // Update normal axis visual.
+        // Update toolpath line renderer and normal axis visual.
         if (_gcode_generator._uv_points.Count != _last_uv_count) {
             _last_uv_count = _gcode_generator._uv_points.Count;
 
             UpdateToolpathRenderer();
 
-            // Set current normal vector visual.
             if (_gcode_generator._uv_points.Count > 0) {
                 Vector2 curr_uv = _gcode_generator._uv_points[^1];
                 Vector3 curr_pos = _control_point_obj.CalcBsurface(curr_uv.x, curr_uv.y);
@@ -87,7 +153,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
             preview_sticky = true;
         }
         else {
-            operation_type = "normal"; // Default to normal toolpathing.
+            operation_type = "normal";
             paths_queued = 0;
             preview_sticky = false;
         }
@@ -96,15 +162,14 @@ public class ConformalToolpathingManager : MonoBehaviour {
         Vector2 preview_uv = _gcode_generator.FindStepoverPoint(out byte preview_solution_flags, out _,
             target_world: transform.position,
             sticky_mode: preview_sticky,
-            solution_requested: 0b0111); // No far solutions.
-        // If the next point is NaN, mark the point as unaddable.
+            solution_requested: 0b0111);
         bool preview_unaddable = float.IsNaN(preview_uv.x) || float.IsNaN(preview_uv.y);
 
         // If addable, add preview point to the line renderer.
         if (!preview_unaddable) {
             Vector3 preview_point_local = _control_point_obj.CalcBsurface(preview_uv.x, preview_uv.y);
             Vector3 preview_point_world = _control_point_obj.transform.TransformPoint(preview_point_local);
-            _line_renderer.positionCount = _gcode_generator._uv_points.Count + 1; // Set the position count to include the preview point.
+            _line_renderer.positionCount = _gcode_generator._uv_points.Count + 1;
             _line_renderer.SetPosition(_line_renderer.positionCount - 1, preview_point_world);
         }
         else {
@@ -120,19 +185,17 @@ public class ConformalToolpathingManager : MonoBehaviour {
         bool b_just_released = OVRInput.GetUp(OVRInput.Button.Two, OVRInput.Controller.RTouch);
         bool preview_is_cw = (preview_solution_flags & 0b0001) > 0;
         if (operation_type == "normal") {
-            // A button -> add points.
             if (a_pressed && (preview_unaddable == false)) {
                 _gcode_generator.AddPointsToTargetUvExclusive(preview_uv.x, preview_uv.y);
                 _gcode_generator._uv_points.Add(preview_uv);
             }
-            // B button -> delete points.
-            // if (b_pressed && _gcode_generator._uv_points.Count > 0)
-            //     _gcode_generator._uv_points.RemoveAt(_gcode_generator._uv_points.Count - 1);
         }
         if (operation_type == "concentric") {
-            if (a_just_pressed && (preview_unaddable == false)) {
-                DrawConcentricRing(_gcode_generator._uv_points[^1], !preview_is_cw, paths_queued); // If preview is ccw, we draw cw concentric rings.
-                _generate_concentric_toolpath._concentric_rings_queued = 0;
+            if (a_just_pressed) {
+                if (preview_unaddable == false) {
+                    DrawConcentricRing(_gcode_generator._uv_points[^1], !preview_is_cw, paths_queued);
+                    _generate_concentric_toolpath._concentric_rings_queued = 0;
+                }
             }
             if (b_just_pressed) {
                 _generate_concentric_toolpath._concentric_rings_queued = 0;
@@ -145,17 +208,19 @@ public class ConformalToolpathingManager : MonoBehaviour {
                 _rectilinear_selection_cursor.enabled = true;
             else
                 _rectilinear_selection_cursor.enabled = false;
-            if (a_just_pressed && (preview_unaddable == false)) {
-                if (_rectilinear_state == 0) {
-                    _rectilinear_state = 1;
-                }
-                else {
-                    HashSet<int> selection_to_end_indices = new();
-                    for (int i = _rectilinear_selection_cursor._index_of_closest; i < _gcode_generator._uv_points.Count; i++)
-                        selection_to_end_indices.Add(i);
-                    DrawRectilinear(preview_is_cw, paths_queued, selection_to_end_indices);
-                    _generate_rectilinear_toolpath._rectilinear_lines_queued = 0;
-                    _rectilinear_state = 0;
+            if (a_just_pressed) {
+                if (preview_unaddable == false) {
+                    if (_rectilinear_state == 0) {
+                        _rectilinear_state = 1;
+                    }
+                    else {
+                        HashSet<int> selection_to_end_indices = new();
+                        for (int i = _rectilinear_selection_cursor._index_of_closest; i < _gcode_generator._uv_points.Count; i++)
+                            selection_to_end_indices.Add(i);
+                        DrawRectilinear(preview_is_cw, paths_queued, selection_to_end_indices);
+                        _generate_rectilinear_toolpath._rectilinear_lines_queued = 0;
+                        _rectilinear_state = 0;
+                    }
                 }
             }
             if (b_just_pressed) {
@@ -167,7 +232,6 @@ public class ConformalToolpathingManager : MonoBehaviour {
             _rectilinear_selection_cursor.GetComponent<MeshRenderer>().enabled = false;
         }
     }
-
     #endregion Update Cycle
 
     int DrawConcentricRing(Vector2 start_uv, bool dir_cw, int num_rings) {

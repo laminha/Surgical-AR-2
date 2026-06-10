@@ -17,6 +17,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
     private string _file_name;
     private string _file_path;
     public OVRCameraRig _tracking_space;
+    public Vector2 _start_uv = new Vector2(0f, 0.5f);
 
 
 
@@ -80,7 +81,7 @@ public class BSurfaceGcodeGenerator : MonoBehaviour {
         // Clear previous uv points.
         _uv_points.Clear();
         // Add start point to uv points.
-        _uv_points.Add(new Vector2(0, 0.5f));
+        _uv_points.Add(_start_uv);
         // Traverse circular perimeter of the BSurface.
         for (int i = 0; i < 100; i++) {
             float theta = 2 * Mathf.PI * i / 99f;
