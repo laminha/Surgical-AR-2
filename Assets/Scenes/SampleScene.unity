@@ -90447,6 +90447,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _gcode_generator: {fileID: 2122009343}
+  _button_text: {fileID: 1349176193}
+  _default_text: 'Clear
+
+    Toolpath'
+  _feedback_duration: 1
 --- !u!114 &2101041596
 MonoBehaviour:
   m_ObjectHideFlags: 0
