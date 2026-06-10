@@ -18,6 +18,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
     enum ToolpathState { SelectStart, Ready }
     ToolpathState _state = ToolpathState.Ready; // Default to Ready until "Set Start Point" is pressed.
     Vector2 _prev_start_uv = new Vector2(0f, 0.5f);
+    bool _freehand_enabled = false; // for enabling freehand toolpath drawing
     
     void Awake() {
         _tracking_space = FindFirstObjectByType<OVRCameraRig>();
@@ -32,6 +33,12 @@ public class ConformalToolpathingManager : MonoBehaviour {
         if (_control_point_obj._control_points != null) {
             UpdateToolpathRenderer();
         }
+    }
+    public void ToggleFreehandDrawing() {
+    _freehand_enabled = !_freehand_enabled;
+    }
+    public bool IsFreehandEnabled() {
+        return _freehand_enabled;
     }
     public void UpdateToolpathRenderer() {
         // Update the toolpath line renderer.
@@ -185,7 +192,7 @@ public class ConformalToolpathingManager : MonoBehaviour {
         bool b_just_released = OVRInput.GetUp(OVRInput.Button.Two, OVRInput.Controller.RTouch);
         bool preview_is_cw = (preview_solution_flags & 0b0001) > 0;
         if (operation_type == "normal") {
-            if (a_pressed && (preview_unaddable == false)) {
+            if (_freehand_enabled && a_pressed && (preview_unaddable == false)) {
                 _gcode_generator.AddPointsToTargetUvExclusive(preview_uv.x, preview_uv.y);
                 _gcode_generator._uv_points.Add(preview_uv);
             }
