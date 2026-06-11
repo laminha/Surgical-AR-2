@@ -19,7 +19,7 @@ public class BsplineManager : MonoBehaviour {
     }
 
     [ContextMenu("DefineSurface")]
-    void DefineSurface() {
+    public void DefineSurface() {
         const float _surfaceDefinitionCorrectionRoot = 1.8f;
         _size = _knot_vector.Length - _surface_degree - 1;
         Debug.Log("Defining surface with size: " + _size + "x" + _size);
@@ -236,5 +236,16 @@ public class BsplineManager : MonoBehaviour {
                 output += VelocityBasisFunctionV3D(i, j, u, v) * _control_points[i, j];
             }
         return output;
+    }
+
+    public void ResetSurface()
+    {
+        for (int u = 0; u < _size; u++)
+            for (int v = 0; v < _size; v++)
+                _control_points[u, v] = new Vector3(
+                    0.1f * (2f * u / (_size - 1) - 1),
+                    -0.075f,
+                    0.1f * (2f * v / (_size - 1) - 1)
+                );
     }
 }

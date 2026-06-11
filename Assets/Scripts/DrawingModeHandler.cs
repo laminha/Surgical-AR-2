@@ -34,4 +34,8 @@ public class DrawingModeHandler : MonoBehaviour
         // Clear line renderer (the drawing).
         _line_renderer.positionCount = 0;
     }
+    public void ClearSketch()
+    {
+        _line_renderer.positionCount = 0;
+    }
 }
