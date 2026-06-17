@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using MathNet.Numerics.LinearAlgebra;
+using System.Collections.Generic;
 
 public class SurfaceFittingManager : MonoBehaviour
 {
@@ -15,6 +16,8 @@ public class SurfaceFittingManager : MonoBehaviour
     public float _projection_offset = 0.5f;
     public float _projection_max_distance = 5.0f;
     public float _min_surface_normal_y = 0.0f;
+    public int _loop_closure_anchor_points = 5;
+    Vector3[] _raw_loop_points = null;
 
     int _major_diameter_index;
     bool _loop_is_clockwise;
@@ -85,41 +88,98 @@ public class SurfaceFittingManager : MonoBehaviour
     [ContextMenu("Fit Elliptical Initial Guess")]
     public void FitSurfaceToDrawingEllipticalHeuristic()
     {
+        // Capture raw loop on first call, restore it on subsequent calls.
+        if (_raw_loop_points == null || _raw_loop_points.Length == 0)
+        {
+            _raw_loop_points = new Vector3[_drawn_loop.positionCount];
+            for (int i = 0; i < _drawn_loop.positionCount; i++)
+                _raw_loop_points[i] = _drawn_loop.GetPosition(i);
+        }
+        else
+        {
+            _drawn_loop.positionCount = _raw_loop_points.Length;
+            for (int i = 0; i < _raw_loop_points.Length; i++)
+                _drawn_loop.SetPosition(i, _raw_loop_points[i]);
+        }
+
         if (_enable_surface_constraint)
             ProjectLoopOntoAnatomySurface();
-        
+
         // Exit if there are less than 10 points in the drawn loop.
         if (_drawn_loop.positionCount < 10)
             return;
 
-        // Fill the possible spots where the last and first point at too far apart by linearly interpolating.
-        const float resolution = 0.01f; // This number should be same as drawing spacing resolution.
+        const float resolution = 0.01f;
         int num_points = _drawn_loop.positionCount;
-        float loop_open_distance = Vector3.Distance(_drawn_loop.GetPosition(0), _drawn_loop.GetPosition(num_points - 1));
-        int num_new_points = (int)MathF.Floor(loop_open_distance / resolution);
-        Vector3 last_point = _drawn_loop.GetPosition(num_points - 1);
-        Vector3 first_point = _drawn_loop.GetPosition(0);
-        _drawn_loop.positionCount += num_new_points;
-        if (num_new_points != 1)
-            for (int i = 0; i < num_new_points; i++)
-                _drawn_loop.SetPosition(num_points + i, Vector3.Lerp(last_point, first_point, 1f * i / (num_new_points - 1)));
-        else
-            _drawn_loop.SetPosition(num_points, first_point);
+        int n = Mathf.Min(_loop_closure_anchor_points, num_points / 4); // Safety clamp.
 
-        // Find the center of mass of the points
+        // Compute anchor positions for tangent estimation only.
+        Vector3 start_anchor = Vector3.zero;
+        for (int i = 0; i < n; i++)
+            start_anchor += _drawn_loop.GetPosition(i);
+        start_anchor /= n;
+
+        Vector3 end_anchor = Vector3.zero;
+        for (int i = num_points - n; i < num_points; i++)
+            end_anchor += _drawn_loop.GetPosition(i);
+        end_anchor /= n;
+
+        // Use the actual trimmed boundary points as bridge endpoints to avoid gaps.
+        Vector3 bridge_start = _drawn_loop.GetPosition(num_points - n - 1); // Last kept point.
+        Vector3 bridge_end = _drawn_loop.GetPosition(n); // First kept point.
+
+        // Compute tangents from the anchor regions.
+        // Outgoing tangent: direction the loop is traveling at the start anchor.
+        Vector3 start_tangent = (_drawn_loop.GetPosition(n - 1) - _drawn_loop.GetPosition(0)).normalized;
+        // Incoming tangent: direction the loop was traveling as it approached the end anchor.
+        Vector3 end_tangent = (_drawn_loop.GetPosition(num_points - 1) - _drawn_loop.GetPosition(num_points - n)).normalized;
+
+        // Trim first N and last N points, keeping only the middle section.
+        int trimmed_count = num_points - 2 * n;
+        List<Vector3> trimmed_points = new();
+        for (int i = n; i < num_points - n; i++)
+            trimmed_points.Add(_drawn_loop.GetPosition(i));
+
+        // Generate cubic Hermite bridge from end_anchor to start_anchor.
+        // Scale tangents by the distance between anchors for a natural curve.
+        float bridge_length = Vector3.Distance(bridge_start, bridge_end);
+        Vector3 scaled_end_tangent = end_tangent * bridge_length;
+        Vector3 scaled_start_tangent = start_tangent * bridge_length;
+
+        List<Vector3> bridge_points = new();
+        int bridge_steps = Mathf.Max(1, Mathf.RoundToInt(bridge_length / resolution));
+        for (int i = 0; i <= bridge_steps; i++)
+        {
+            float t = (float)i / bridge_steps;
+            float h00 = 2*t*t*t - 3*t*t + 1;
+            float h10 = t*t*t - 2*t*t + t;
+            float h01 = -2*t*t*t + 3*t*t;
+            float h11 = t*t*t - t*t;
+            Vector3 point = h00 * bridge_start + h10 * scaled_end_tangent + h01 * bridge_end + h11 * scaled_start_tangent;
+            bridge_points.Add(point);
+        }
+
+        // Rebuild the loop: trimmed middle + bridge.
+        List<Vector3> final_points = new();
+        final_points.AddRange(trimmed_points);
+        final_points.AddRange(bridge_points);
+
+        _drawn_loop.positionCount = final_points.Count;
+        for (int i = 0; i < final_points.Count; i++)
+            _drawn_loop.SetPosition(i, final_points[i]);
+
+        // Find the center of mass of the points.
         num_points = _drawn_loop.positionCount;
         Vector3 center_of_mass = new();
         for (int i = 0; i < num_points; i++)
             center_of_mass += _drawn_loop.GetPosition(i) / num_points;
 
         // Scan through half the loop, finding the difference between the distances of
-        // two pairs of opposite indices,storing the index of the maximum difference.
-        // This is to attain a sort of major and minor diameter of a virtual ellipse.
+        // two pairs of opposite indices, storing the index of the maximum difference.
         float curr_max_difference = 0;
         int curr_max_difference_index = 0;
         for (int i = 0; i < num_points / 2; i++)
         {
-            // Define the 4 vertecies to sample.
             Vector3 no_rev = _drawn_loop.GetPosition(i);
             Vector3 quarter_rev = _drawn_loop.GetPosition((i + num_points / 4) % num_points);
             Vector3 half_rev = _drawn_loop.GetPosition((i + num_points / 2) % num_points);
@@ -133,7 +193,6 @@ public class SurfaceFittingManager : MonoBehaviour
                 curr_max_difference_index = i;
             }
         }
-        // Store the index of the major diameter.
         _major_diameter_index = curr_max_difference_index;
 
         // Define vertices of major and minor axes.
@@ -141,41 +200,27 @@ public class SurfaceFittingManager : MonoBehaviour
             _drawn_loop.GetPosition((_major_diameter_index) % num_points);
         Vector3 minor_axis = _drawn_loop.GetPosition((_major_diameter_index + 3 * num_points / 4) % num_points) -
             _drawn_loop.GetPosition((_major_diameter_index + num_points / 4) % num_points);
-        // And ellipse diameters.
         float major_diameter = major_axis.magnitude;
         float minor_diameter = minor_axis.magnitude;
-        // Define normal and flip if its pointing down.
         Vector3 ellipse_normal = Vector3.Cross(major_axis, minor_axis).normalized;
         if (ellipse_normal.y < 0)
         {
-            // Flip minor axis and recalculate normal if the normal is pointing down.
-            // (Can be mathematically simplified, but this is easier to understand.)
             minor_axis = -minor_axis;
             ellipse_normal = Vector3.Cross(major_axis, minor_axis).normalized;
             _loop_is_clockwise = false;
-            // Debug.Log("Loop is counter-clockwise, flipping ellipse normal.");
         }
         else
         {
             _loop_is_clockwise = true;
-            // Debug.Log("Loop is clockwise, keeping ellipse normal as is.");
         }
-        // Define rotation that brings "up" to normal, and "forward" to -minor.
-        // We flip the minor axis because Unity is LHR while the Bsurface is RHR.
-        // We want the minor axis to point in the same direction as the "v" axis of the surface.
         Quaternion ellipse_rot = Quaternion.LookRotation(-minor_axis, ellipse_normal);
-        // Get the rotation from the node UI to the ellipse_rot
         Quaternion node_ui_rot = transform.rotation;
         Quaternion node_ui_to_ellipse_rot = Quaternion.Inverse(node_ui_rot) * ellipse_rot;
-        // Define scale factor. 1/4 because the UI is currently scaled that much.
         float ellipse_scale = 1f / 4f;
 
-        // Transform control points to drawn loop.
         for (int i = 0; i < _bspline._control_points.GetLength(0); i++)
             for (int j = 0; j < _bspline._control_points.GetLength(1); j++)
             {
-                // Scale points.
-                // unit_i is just i squeezed into the range [0, 1].
                 float unit_i = 1f * i / (_bspline._control_points.GetLength(0) - 1);
                 float unit_j = 1f * j / (_bspline._control_points.GetLength(1) - 1);
                 _bspline._control_points[i, j] = new Vector3(
@@ -183,11 +228,7 @@ public class SurfaceFittingManager : MonoBehaviour
                     0,
                     ellipse_scale * (minor_diameter * unit_j - minor_diameter / 2)
                 );
-
-                // Rotate points.
                 _bspline._control_points[i, j] = node_ui_to_ellipse_rot * _bspline._control_points[i, j];
-
-                // Translate points.
                 _bspline._control_points[i, j] += _bspline.transform.InverseTransformPoint(center_of_mass);
             }
     }
@@ -292,4 +333,10 @@ public class SurfaceFittingManager : MonoBehaviour
         Debug.DrawLine(loopPoint_quarter, loopPoint_quarter + Vector3.down, Color.red, 10f);
         Debug.Log("Drew 0% and 25% loop points for debugging.");
     }
+
+    public void ClearRawLoop()
+    {
+        _raw_loop_points = null;
+    }
+
 }

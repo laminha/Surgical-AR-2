@@ -24,6 +24,7 @@ public class CallClearWorkspace : MonoBehaviour
     {
         _drawing_mode_handler.ClearSketch();
         _surface_fitting_manager._drawn_loop.positionCount = 0;
+        _surface_fitting_manager.ClearRawLoop();
         _gcode_generator.ClearToolpath();
         _bspline_manager.ResetSurface();
         _bsurface_mesh_handler.gameObject.SetActive(false);
