@@ -16,8 +16,6 @@ public class ClinicalScenarioManager : MonoBehaviour
     public GameObject _scenario_menu_panel;
 
     GameObject _active_anatomy = null;
-    
-    
 
     void Start()
     {
@@ -48,6 +46,7 @@ public class ClinicalScenarioManager : MonoBehaviour
         // Panel stays open.
     }
     public int GetActiveScenarioIndex() => _active_scenario_index;
+
     void Activate(GameObject anatomy)
     {
         if (anatomy == null)
@@ -73,4 +72,20 @@ public class ClinicalScenarioManager : MonoBehaviour
     /// Used by SurfaceFittingManager for anatomy-aware projection.
     /// </summary>
     public GameObject GetActiveAnatomy() => _active_anatomy;
+
+    /// <summary>
+    /// Returns the world-space centroid of the active anatomy's mesh bounds.
+    /// Falls back to transform.position if no MeshFilter is present.
+    /// </summary>
+    public Vector3 GetAnatomyCentroid()
+    {
+        if (_active_anatomy == null)
+            return Vector3.zero;
+
+        MeshFilter mf = _active_anatomy.GetComponent<MeshFilter>();
+        if (mf != null && mf.mesh != null)
+            return _active_anatomy.transform.TransformPoint(mf.mesh.bounds.center);
+
+        return _active_anatomy.transform.position;
+    }
 }

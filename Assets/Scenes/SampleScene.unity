@@ -25647,13 +25647,14 @@ MonoBehaviour:
   _vml_width: 0.4
   _vml_height: 0.15
   _vml_depth: 0.2
-  _vml_defect_radius: 0.06
-  _vml_defect_depth: 0.15
+  _vml_defect_radius: 0.03
+  _vml_defect_depth: 0.1
   _vml_top_resolution: 32
-  _irr_base_radius: 0.15
-  _irr_dome_height: 0.04
-  _irr_radial_segs: 64
-  _irr_ring_segs: 16
+  _skull_radius_xz: 0.045
+  _skull_radius_y: 0.135
+  _skull_cap_angle: 20
+  _skull_lon_segs: 48
+  _skull_lat_segs: 16
 --- !u!114 &551662495
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -64916,7 +64917,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Irregular
+  m_text: 'Calvarial
+
+    Defect'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -66538,9 +66541,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1649b07ccb3b9a640ae27abc40a36ca4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _lambda_regularization: 0.5
   _bspline: {fileID: 1487145808}
   _drawn_loop: {fileID: 1535330072}
+  _lambda_regularization: 0.5
+  _enable_surface_constraint: 1
+  _anatomy_layer_mask:
+    serializedVersion: 2
+    m_Bits: 64
+  _scenario_manager: {fileID: 551662492}
+  _projection_offset: 0.5
+  _projection_max_distance: 5
+  _min_surface_normal_y: 0.1
 --- !u!1 &1488451249
 GameObject:
   m_ObjectHideFlags: 0

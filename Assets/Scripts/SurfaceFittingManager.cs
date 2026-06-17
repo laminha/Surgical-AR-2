@@ -4,14 +4,90 @@ using MathNet.Numerics.LinearAlgebra;
 
 public class SurfaceFittingManager : MonoBehaviour
 {
-    public float _lambda_regularization = 1; // Regularization parameter for the least squares fitting.
-    int _major_diameter_index; // Index of the major diameter in the drawn loop.
-    bool _loop_is_clockwise;
     public BsplineManager _bspline;
     public LineRenderer _drawn_loop;
+    public float _lambda_regularization = 1;
+
+    [Header("Surface Constraint")]
+    public bool _enable_surface_constraint = true;
+    public LayerMask _anatomy_layer_mask;
+    public ClinicalScenarioManager _scenario_manager;
+    public float _projection_offset = 0.5f;
+    public float _projection_max_distance = 5.0f;
+    public float _min_surface_normal_y = 0.0f;
+
+    int _major_diameter_index;
+    bool _loop_is_clockwise;
+
+    private void ProjectLoopOntoAnatomySurface()
+    {
+        if (_scenario_manager == null)
+        {
+            Debug.LogWarning("SurfaceFittingManager: _scenario_manager is not assigned; skipping projection.");
+            return;
+        }
+
+        int count = _drawn_loop.positionCount;
+
+        // Compute world-space top of the anatomy bounding box so rays always start above it.
+        GameObject anatomy = _scenario_manager.GetActiveAnatomy();
+        float ray_start_y = _scenario_manager.GetAnatomyCentroid().y + _projection_offset;
+        if (anatomy != null)
+        {
+            MeshFilter mf = anatomy.GetComponent<MeshFilter>();
+            if (mf != null && mf.mesh != null)
+            {
+                Vector3 world_max = anatomy.transform.TransformPoint(mf.mesh.bounds.max);
+                ray_start_y = world_max.y + _projection_offset;
+            }
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            Vector3 point = _drawn_loop.GetPosition(i);
+            Vector3 ray_origin = new Vector3(point.x, ray_start_y, point.z);
+
+            // Primary: shoot straight down, pick the highest-Y hit (= top surface).
+            bool prev_backfaces = Physics.queriesHitBackfaces;
+            Physics.queriesHitBackfaces = true;
+            RaycastHit[] hits = Physics.RaycastAll(ray_origin, Vector3.down, _projection_max_distance, _anatomy_layer_mask);
+            Physics.queriesHitBackfaces = prev_backfaces;
+            bool found = false;
+            Vector3 best_point = Vector3.zero;
+            float best_y = float.NegativeInfinity;
+            foreach (RaycastHit h in hits)
+            {
+                if (h.point.y > best_y) { best_y = h.point.y; best_point = h.point; found = true; }
+            }
+
+            // TEMP DEBUG — remove after diagnosing
+            if (i == 0) Debug.Log($"Point 0: ray_origin={ray_origin}, hits={hits.Length}, best_y={best_y}, best_point={best_point}");
+
+            if (found)
+            {
+                _drawn_loop.SetPosition(i, best_point);
+            }
+            else
+            {
+                // Fallback: shoot inward toward anatomy centroid (handles points
+                // drawn outside the XZ footprint of the mesh, e.g. skull cap rim).
+                Vector3 centroid = _scenario_manager.GetAnatomyCentroid();
+                Vector3 inward = (centroid - point).normalized;
+                Vector3 fallback_origin = point - inward * _projection_offset;
+                if (Physics.Raycast(fallback_origin, inward, out RaycastHit fallback_hit, _projection_max_distance, _anatomy_layer_mask))
+                    _drawn_loop.SetPosition(i, fallback_hit.point);
+                else
+                    Debug.LogWarning($"SurfaceFittingManager: No surface hit for loop point {i}; leaving unchanged.");
+            }
+        }
+    }
+
     [ContextMenu("Fit Elliptical Initial Guess")]
     public void FitSurfaceToDrawingEllipticalHeuristic()
     {
+        if (_enable_surface_constraint)
+            ProjectLoopOntoAnatomySurface();
+        
         // Exit if there are less than 10 points in the drawn loop.
         if (_drawn_loop.positionCount < 10)
             return;
@@ -115,9 +191,13 @@ public class SurfaceFittingManager : MonoBehaviour
                 _bspline._control_points[i, j] += _bspline.transform.InverseTransformPoint(center_of_mass);
             }
     }
+
     [ContextMenu("Fit Least Squares Control Points")]
     public void FitSurfaceToDrawingLeastSquares()
     {
+        if (_enable_surface_constraint)
+            ProjectLoopOntoAnatomySurface();
+
         // Exit if there are less than 10 points in the drawn loop.
         if (_drawn_loop.positionCount < 10)
             return;
