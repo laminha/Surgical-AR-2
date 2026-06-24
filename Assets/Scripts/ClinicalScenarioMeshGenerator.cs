@@ -26,6 +26,9 @@ public class ClinicalScenarioMeshGenerator : MonoBehaviour
     public GameObject _anatomy_heart;
     public GameObject _anatomy_vml;
     public GameObject _anatomy_irregular;
+    public Mesh _heart_mesh_imported;
+    public GameObject _anatomy_real_heart;
+    
 
     [Header("Heart parameters (meters)")]
     public float _heart_radius_x = 0.03f;
@@ -54,6 +57,9 @@ public class ClinicalScenarioMeshGenerator : MonoBehaviour
     [Tooltip("Radial rings from pole to edge.")]
     public int   _skull_lat_segs  = 16;
 
+    [Header("Real heart mesh (Scenario 4 — imported FBX)")]
+    public float _real_heart_scale = 300f;
+
     void Awake()
     {
         if (_anatomy_heart == null || _anatomy_vml == null || _anatomy_irregular == null)
@@ -72,9 +78,14 @@ public class ClinicalScenarioMeshGenerator : MonoBehaviour
     [ContextMenu("GenerateAll")]
     public void GenerateAll()
     {
-        if (_anatomy_heart     != null) BuildMesh(_anatomy_heart,     BuildHeartMesh());
-        if (_anatomy_vml       != null) BuildMesh(_anatomy_vml,       BuildVMLMesh());
-        if (_anatomy_irregular != null) BuildMesh(_anatomy_irregular, BuildSkullCapMesh());
+        if (_anatomy_heart     != null) BuildMesh(_anatomy_heart,      BuildHeartMesh());
+        if (_anatomy_vml       != null) BuildMesh(_anatomy_vml,        BuildVMLMesh());
+        if (_anatomy_irregular != null) BuildMesh(_anatomy_irregular,  BuildSkullCapMesh());
+        if (_anatomy_real_heart != null && _heart_mesh_imported != null)
+        {
+            BuildMesh(_anatomy_real_heart, _heart_mesh_imported);
+            _anatomy_real_heart.transform.localScale = Vector3.one * _real_heart_scale;
+        }
     }
 
     static void BuildMesh(GameObject target, Mesh mesh)

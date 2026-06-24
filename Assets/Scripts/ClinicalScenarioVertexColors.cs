@@ -23,6 +23,9 @@ public class ClinicalScenarioVertexColors : MonoBehaviour
     public Color _irr_center_color = new Color(0.9f, 0.75f, 0.65f); // Skin/tissue
     public Color _irr_edge_color   = new Color(0.7f, 0.4f, 0.3f);   // Darker edge
 
+    [Header("Real heart colors")]
+    public Color _real_heart_color = new Color(0.85f, 0.2f, 0.2f, 0.5f); // red, semi-transparent
+
     void Start()
     {
         ApplyAll();
@@ -37,6 +40,7 @@ public class ClinicalScenarioVertexColors : MonoBehaviour
         if (mgr._anatomy_heart     != null) ApplyHeartColors(mgr._anatomy_heart);
         if (mgr._anatomy_scenario2 != null) ApplyVMLColors(mgr._anatomy_scenario2);
         if (mgr._anatomy_scenario3 != null) ApplyIrregularColors(mgr._anatomy_scenario3);
+        if (mgr._anatomy_scenario4 != null) ApplyRealHeartColors(mgr._anatomy_scenario4);
     }
 
     // -------------------------------------------------------------------------
@@ -213,4 +217,26 @@ public class ClinicalScenarioVertexColors : MonoBehaviour
             mr.material = mat;
         }
     }
-}
+
+    void ApplyRealHeartColors(GameObject target)
+    {
+        MeshRenderer mr = target.GetComponent<MeshRenderer>();
+        if (mr == null)
+        {
+            Debug.LogError("No MeshRenderer found on " + target.name);
+            return;
+        }
+
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null)
+        {
+            Debug.LogError("URP/Lit shader not found.");
+            return;
+        }
+
+        Material mat = new Material(shader);
+        mat.color = new Color(0.85f, 0.2f, 0.2f, 1f);
+        mat.SetFloat("_Cull", 0f);
+        mr.material = mat;
+    }
+    }

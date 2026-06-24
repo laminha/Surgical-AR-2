@@ -11,6 +11,7 @@ public class ClinicalScenarioManager : MonoBehaviour
     public GameObject _anatomy_heart;
     public GameObject _anatomy_scenario2; // Volumetric Muscle Loss
     public GameObject _anatomy_scenario3; // Irregular Perimeter Wound
+    public GameObject _anatomy_scenario4; // Real Heart Mesh
 
     [Header("Submenu Panel")]
     public GameObject _scenario_menu_panel;
@@ -42,6 +43,7 @@ public class ClinicalScenarioManager : MonoBehaviour
             case 0: Activate(_anatomy_heart);      break;
             case 1: Activate(_anatomy_scenario2);  break;
             case 2: Activate(_anatomy_scenario3);  break;
+            case 3: Activate(_anatomy_scenario4);  break;
         }
         // Panel stays open.
     }
@@ -63,6 +65,7 @@ public class ClinicalScenarioManager : MonoBehaviour
         if (_anatomy_heart     != null) _anatomy_heart.SetActive(false);
         if (_anatomy_scenario2 != null) _anatomy_scenario2.SetActive(false);
         if (_anatomy_scenario3 != null) _anatomy_scenario3.SetActive(false);
+        if (_anatomy_scenario4 != null) _anatomy_scenario4.SetActive(false);
         _active_anatomy = null;
         _active_scenario_index = -1;
     }
