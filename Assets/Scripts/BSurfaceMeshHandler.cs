@@ -66,11 +66,18 @@ public class BSurfaceMeshHandler : MonoBehaviour
         mesh.RecalculateBounds();
         // Assign mesh to mesh filter.
         _mesh_filter.mesh = mesh;
+
+        MeshRenderer mr = GetComponent<MeshRenderer>();
+        if (mr != null)
+            mr.material.renderQueue = 4000;
     }
 
     [ContextMenu("Update")]
     void Update()
     {
+        MeshRenderer mr = GetComponent<MeshRenderer>();
+        if (mr != null)
+            mr.material.renderQueue = 4000;
         // Interate through all vertices, moving them to the curve.
         for (int i = 0; i < vertex_per_side; i++)
             for (int j = 0; j < vertex_per_side; j++)
