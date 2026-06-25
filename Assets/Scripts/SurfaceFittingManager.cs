@@ -17,10 +17,68 @@ public class SurfaceFittingManager : MonoBehaviour
     public float _projection_max_distance = 5.0f;
     public float _min_surface_normal_y = 0.0f;
     public int _loop_closure_anchor_points = 5;
+
+    [Header("Interior Surface Samples")]
+    [Tooltip("Grid resolution for sampling the anatomy surface inside the loop (N×N grid, only points inside the unit circle are used). Default 5 gives ~19 interior samples.")]
+    public int _interior_sample_resolution = 5;
+    [Tooltip("Weight of interior surface samples relative to boundary loop points in the least-squares solve. 1 = equal weight.")]
+    public float _interior_sample_weight = 1f;
+
     Vector3[] _raw_loop_points = null;
 
     int _major_diameter_index;
     bool _loop_is_clockwise;
+
+    // Samples the anatomy surface on a grid inside the loop boundary.
+    // Returns world-space hit points and their corresponding UV coordinates (u,v in [0,1]).
+    // Used by both fitting methods to pull the surface interior toward the anatomy.
+    private List<(Vector3 point, float u, float v)> SampleInteriorSurfacePoints(float ray_start_y)
+    {
+        var results = new List<(Vector3, float, float)>();
+        if (_scenario_manager == null || !_enable_surface_constraint) return results;
+
+        int res = _interior_sample_resolution;
+        Vector2 circle_center = new Vector2(0.5f, 0.5f);
+
+        for (int ui = 0; ui < res; ui++)
+        {
+            for (int vi = 0; vi < res; vi++)
+            {
+                // Map grid indices to UV space [0,1].
+                float u = (res == 1) ? 0.5f : (float)ui / (res - 1);
+                float v = (res == 1) ? 0.5f : (float)vi / (res - 1);
+
+                // Skip points outside the unit circle (the domain of the B-surface).
+                if (Vector2.Distance(new Vector2(u, v), circle_center) >= 0.5f) continue;
+
+                // Evaluate the B-surface at this UV to get an approximate world XZ position,
+                // then raycast down to find the actual anatomy surface height.
+                Vector3 surface_local = _bspline.CalcBsurface(u, v);
+                Vector3 surface_world = _bspline.transform.TransformPoint(surface_local);
+
+                Vector3 ray_origin = new Vector3(surface_world.x, ray_start_y, surface_world.z);
+
+                bool prev_backfaces = Physics.queriesHitBackfaces;
+                Physics.queriesHitBackfaces = true;
+                RaycastHit[] hits = Physics.RaycastAll(ray_origin, Vector3.down, _projection_max_distance, _anatomy_layer_mask);
+                Physics.queriesHitBackfaces = prev_backfaces;
+
+                float best_y = float.NegativeInfinity;
+                Vector3 best_point = Vector3.zero;
+                bool found = false;
+                foreach (RaycastHit h in hits)
+                {
+                    if (h.point.y > best_y) { best_y = h.point.y; best_point = h.point; found = true; }
+                }
+
+                if (found)
+                    results.Add((best_point, u, v));
+            }
+        }
+
+        Debug.Log($"SurfaceFittingManager: sampled {results.Count} interior surface points.");
+        return results;
+    }
 
     private void ProjectLoopOntoAnatomySurface()
     {
@@ -231,6 +289,48 @@ public class SurfaceFittingManager : MonoBehaviour
                 _bspline._control_points[i, j] = node_ui_to_ellipse_rot * _bspline._control_points[i, j];
                 _bspline._control_points[i, j] += _bspline.transform.InverseTransformPoint(center_of_mass);
             }
+
+        // Snap each control point onto the anatomy surface so the initial guess
+        // follows the curvature of the mesh, not a flat ellipse.
+        if (_enable_surface_constraint && _scenario_manager != null)
+        {
+            float ray_start_y = _scenario_manager.GetAnatomyCentroid().y + _projection_offset;
+            GameObject anatomy = _scenario_manager.GetActiveAnatomy();
+            if (anatomy != null)
+            {
+                MeshFilter mf = anatomy.GetComponent<MeshFilter>();
+                if (mf != null && mf.mesh != null)
+                {
+                    Vector3 world_max = anatomy.transform.TransformPoint(mf.mesh.bounds.max);
+                    ray_start_y = world_max.y + _projection_offset;
+                }
+            }
+
+            for (int i = 0; i < _bspline._control_points.GetLength(0); i++)
+            {
+                for (int j = 0; j < _bspline._control_points.GetLength(1); j++)
+                {
+                    Vector3 cp_world = _bspline.transform.TransformPoint(_bspline._control_points[i, j]);
+                    Vector3 ray_origin = new Vector3(cp_world.x, ray_start_y, cp_world.z);
+
+                    bool prev_backfaces = Physics.queriesHitBackfaces;
+                    Physics.queriesHitBackfaces = true;
+                    RaycastHit[] hits = Physics.RaycastAll(ray_origin, Vector3.down, _projection_max_distance, _anatomy_layer_mask);
+                    Physics.queriesHitBackfaces = prev_backfaces;
+
+                    float best_y = float.NegativeInfinity;
+                    Vector3 best_point = Vector3.zero;
+                    bool found = false;
+                    foreach (RaycastHit h in hits)
+                    {
+                        if (h.point.y > best_y) { best_y = h.point.y; best_point = h.point; found = true; }
+                    }
+
+                    if (found)
+                        _bspline._control_points[i, j] = _bspline.transform.InverseTransformPoint(best_point);
+                }
+            }
+        }
     }
 
     [ContextMenu("Fit Least Squares Control Points")]
@@ -243,7 +343,28 @@ public class SurfaceFittingManager : MonoBehaviour
         if (_drawn_loop.positionCount < 10)
             return;
 
-        // Create a MathNet vector of points from the drawn loop. This will be our "b" vector.
+        // Compute ray start height (needed for interior sampling below).
+        float ray_start_y_ls = (_scenario_manager != null)
+            ? _scenario_manager.GetAnatomyCentroid().y + _projection_offset
+            : 0f;
+        if (_scenario_manager != null)
+        {
+            GameObject anatomy_ls = _scenario_manager.GetActiveAnatomy();
+            if (anatomy_ls != null)
+            {
+                MeshFilter mf_ls = anatomy_ls.GetComponent<MeshFilter>();
+                if (mf_ls != null && mf_ls.mesh != null)
+                {
+                    Vector3 world_max_ls = anatomy_ls.transform.TransformPoint(mf_ls.mesh.bounds.max);
+                    ray_start_y_ls = world_max_ls.y + _projection_offset;
+                }
+            }
+        }
+
+        // Sample interior anatomy surface points for curvature constraints.
+        var interior_samples = SampleInteriorSurfacePoints(ray_start_y_ls);
+
+        // Create a MathNet vector of points from the drawn loop.
         // We want this vector to start at the point correspondsing to the major diameter index,
         // and then go counter_clockwise around the loop.
         int loop_size = _drawn_loop.positionCount;
@@ -285,6 +406,34 @@ public class SurfaceFittingManager : MonoBehaviour
                 int cp_index_v_dir = k / _bspline._control_points.GetLength(0);
                 basis_values[i, k] = _bspline.BasisFunction3D(cp_index_u_dir, cp_index_v_dir, u, v);
             }
+        }
+
+        // Append interior surface sample rows to loop3d and basis_values.
+        // Each sample contributes one row: its 3D position and its basis values at (u,v).
+        // Rows are weighted by _interior_sample_weight so their influence is tunable.
+        int interior_count = interior_samples.Count;
+        if (interior_count > 0)
+        {
+            Matrix<float> interior_points = Matrix<float>.Build.Dense(interior_count, 3);
+            Matrix<float> interior_basis  = Matrix<float>.Build.Dense(interior_count, num_control_points);
+            for (int s = 0; s < interior_count; s++)
+            {
+                Vector3 pt = interior_samples[s].point;
+                float u_s  = interior_samples[s].u;
+                float v_s  = interior_samples[s].v;
+                interior_points[s, 0] = pt.x * _interior_sample_weight;
+                interior_points[s, 1] = pt.y * _interior_sample_weight;
+                interior_points[s, 2] = pt.z * _interior_sample_weight;
+                for (int k = 0; k < num_control_points; k++)
+                {
+                    int cp_index_u_dir = k % _bspline._control_points.GetLength(0);
+                    int cp_index_v_dir = k / _bspline._control_points.GetLength(0);
+                    interior_basis[s, k] = _bspline.BasisFunction3D(cp_index_u_dir, cp_index_v_dir, u_s, v_s)
+                                           * _interior_sample_weight;
+                }
+            }
+            loop3d       = loop3d.Stack(interior_points);
+            basis_values = basis_values.Stack(interior_basis);
         }
 
         // Create the regularization matrix
