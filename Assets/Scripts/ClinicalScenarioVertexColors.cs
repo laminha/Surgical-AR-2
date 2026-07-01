@@ -24,7 +24,8 @@ public class ClinicalScenarioVertexColors : MonoBehaviour
     public Color _irr_edge_color   = new Color(0.7f, 0.4f, 0.3f);   // Darker edge
 
     [Header("Real heart colors")]
-    public Color _real_heart_color = new Color(0.85f, 0.2f, 0.2f, 0.5f); // red, semi-transparent
+    //public Color _real_heart_color = new Color(0.85f, 0.2f, 0.2f, 0.5f); // red, semi-transparent
+    public Material _real_heart_material;
 
     void Start()
     {
@@ -221,6 +222,15 @@ public class ClinicalScenarioVertexColors : MonoBehaviour
     void ApplyRealHeartColors(GameObject target)
     {
         MeshRenderer mr = target.GetComponent<MeshRenderer>();
+        if (mr == null) return;
+
+        if (_real_heart_material != null)
+            mr.material = _real_heart_material;
+    }
+    /*
+    void ApplyRealHeartColors(GameObject target)
+    {
+        MeshRenderer mr = target.GetComponent<MeshRenderer>();
         if (mr == null)
         {
             Debug.LogError("No MeshRenderer found on " + target.name);
@@ -239,4 +249,5 @@ public class ClinicalScenarioVertexColors : MonoBehaviour
         mat.SetFloat("_Cull", 0f);
         mr.material = mat;
     }
+    */
     }
