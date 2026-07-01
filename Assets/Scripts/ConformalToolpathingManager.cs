@@ -28,6 +28,10 @@ public class ConformalToolpathingManager : MonoBehaviour {
         _generate_concentric_toolpath = FindFirstObjectByType<GenerateConcentricToolpath>();
         _generate_rectilinear_toolpath = FindFirstObjectByType<GenerateRectilinearToolpath>();
     }
+    void Start() {
+        if (_start_point_marker != null)
+            _start_point_marker.SetActive(false);
+    }
     void OnDrawGizmos() {
         Awake();
         if (_control_point_obj._control_points != null) {
