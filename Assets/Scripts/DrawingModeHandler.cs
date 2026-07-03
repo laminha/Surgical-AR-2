@@ -95,6 +95,20 @@ public class DrawingModeHandler : MonoBehaviour
         _line_renderer.positionCount = 0;
     }
 
+    /// <summary>
+    /// Forces drawing mode to a specific state without toggling and without
+    /// clearing the current sketch. Used by scripts (e.g. programmatic sketch
+    /// generators) that need the drawing UI and line renderer active before
+    /// writing points, without risking flipping an already-on state off.
+    /// </summary>
+    public void SetDrawingMode(bool enabled)
+    {
+        _drawing_mode_enabled = enabled;
+        _drawing_ui.SetActive(_drawing_mode_enabled);
+    }
+
+    public bool IsDrawingModeEnabled() => _drawing_mode_enabled;
+
     public void ClearSketch()
     {
         _line_renderer.positionCount = 0;

@@ -11377,8 +11377,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _drawing_ui: {fileID: 857199381}
   _drawing_cursor: {fileID: 1535330071}
+  _projected_cursor: {fileID: 0}
   _tracking_space: {fileID: 1751360718}
   _line_renderer: {fileID: 1535330072}
+  _scenario_manager: {fileID: 0}
+  _anatomy_layer_mask:
+    serializedVersion: 2
+    m_Bits: 0
+  _projection_offset: 0.5
+  _projection_max_distance: 5
 --- !u!1 &251488320
 GameObject:
   m_ObjectHideFlags: 0
@@ -26154,6 +26161,7 @@ GameObject:
   - component: {fileID: 551662494}
   - component: {fileID: 551662495}
   - component: {fileID: 551662496}
+  - component: {fileID: 551662497}
   m_Layer: 0
   m_Name: ClinicalScenarioSystem
   m_TagString: Untagged
@@ -26244,7 +26252,7 @@ MonoBehaviour:
   _vml_divot_color: {r: 0.3, g: 0.05, b: 0.05, a: 1}
   _irr_center_color: {r: 0.9, g: 0.75, b: 0.65, a: 1}
   _irr_edge_color: {r: 0.7, g: 0.4, b: 0.3, a: 1}
-  _real_heart_color: {r: 0.85, g: 0.2, b: 0.2, a: 0.5}
+  _real_heart_material: {fileID: 0}
 --- !u!114 &551662496
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -26264,6 +26272,28 @@ MonoBehaviour:
   _coverage_sample_resolution: 100
   _coverage_radius_fraction: 0.5
   _surface_area_sample_resolution: 100
+--- !u!114 &551662497
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 551662491}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51656951daf607c49ae78c7fb1d78625, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _drawing_mode_handler: {fileID: 251270844}
+  _fitting_manager: {fileID: 1487145810}
+  _mesh_generator: {fileID: 551662494}
+  _scenario_manager: {fileID: 551662492}
+  _sketch_segments: 80
+  _sketch_radius_fraction: 0.6
+  _irregularity_harmonics: 3
+  _irregularity_amplitude: 0.15
+  _sketch_noise_amplitude: 0
+  _sketch_noise_seed: -1
 --- !u!1 &551885511
 GameObject:
   m_ObjectHideFlags: 0
